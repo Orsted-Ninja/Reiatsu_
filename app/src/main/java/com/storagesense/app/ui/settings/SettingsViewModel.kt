@@ -13,11 +13,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import com.storagesense.app.ai.embedding.TextEmbeddingModel
+
 data class SettingsUiState(
     val trashCount: Int = 0,
     val trashSizeFormatted: String = "0 B",
     val totalFilesIndexed: Int = 0,
     val indexProgress: IndexProgress = IndexProgress(),
+    val isNeuralModelActive: Boolean = false,
     val actionMessage: String? = null
 )
 
@@ -25,7 +28,8 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     private val safeFileOps: SafeFileOps,
     private val storageIndexManager: StorageIndexManager,
-    private val fileRepository: FileRepository
+    private val fileRepository: FileRepository,
+    private val textEmbeddingModel: TextEmbeddingModel
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -33,6 +37,12 @@ class SettingsViewModel @Inject constructor(
 
     init {
         refreshStats()
+        viewModelScope.launch {
+            textEmbeddingModel.loadModel()
+            _uiState.value = _uiState.value.copy(
+                isNeuralModelActive = textEmbeddingModel.isNeuralOnnxActive
+            )
+        }
         viewModelScope.launch {
             storageIndexManager.progress.collect { prog ->
                 _uiState.value = _uiState.value.copy(

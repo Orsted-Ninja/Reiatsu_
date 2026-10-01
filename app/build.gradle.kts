@@ -62,6 +62,10 @@ android {
             excludes += "META-INF/io.netty.versions.properties"
         }
     }
+
+    androidResources {
+        noCompress += listOf("onnx", "tflite")
+    }
 }
 
 dependencies {

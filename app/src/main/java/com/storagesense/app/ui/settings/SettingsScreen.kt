@@ -240,7 +240,12 @@ fun SettingsScreen(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
                         EngineStatusRow("Document Parsers", "PDF, Word DOCX, PPTX, TXT (Active)")
                         HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
-                        EngineStatusRow("Semantic Space", "Deterministic 384-dim Word Vectorizer (Active)")
+                        val modelDetail = if (uiState.isNeuralModelActive) {
+                            "all-MiniLM-L6-v2 ONNX INT8 (384-dim Neural, Active)"
+                        } else {
+                            "Local 384-dim Word Vectorizer (Active)"
+                        }
+                        EngineStatusRow("Neural Embeddings", modelDetail)
                         HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
                         EngineStatusRow("Action Engine", "Two-Phase Safety Preview & Undo Log (Active)")
                     }

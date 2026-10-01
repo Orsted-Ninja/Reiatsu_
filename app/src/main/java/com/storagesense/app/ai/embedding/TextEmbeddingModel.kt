@@ -68,6 +68,9 @@ class TextEmbeddingModel @Inject constructor(
         }
     }
 
+    val isNeuralOnnxActive: Boolean
+        get() = ortSession != null
+
     suspend fun embed(text: String): FloatArray = withContext(Dispatchers.Default) {
         if (!isModelLoaded) loadModel()
 
@@ -85,11 +88,12 @@ class TextEmbeddingModel @Inject constructor(
                 val attentionMaskTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(tokenized.attentionMask), inputShape)
                 val tokenTypeIdsTensor = OnnxTensor.createTensor(env, LongBuffer.wrap(tokenized.tokenTypeIds), inputShape)
 
-                val inputs = mapOf(
-                    "input_ids" to inputIdsTensor,
-                    "attention_mask" to attentionMaskTensor,
-                    "token_type_ids" to tokenTypeIdsTensor
-                )
+                val inputs = mutableMapOf<String, OnnxTensor>()
+                inputs["input_ids"] = inputIdsTensor
+                inputs["attention_mask"] = attentionMaskTensor
+                if (session.inputNames.contains("token_type_ids")) {
+                    inputs["token_type_ids"] = tokenTypeIdsTensor
+                }
 
                 val result = session.run(inputs)
                 // Mean pooling or first token pooling over last hidden state
