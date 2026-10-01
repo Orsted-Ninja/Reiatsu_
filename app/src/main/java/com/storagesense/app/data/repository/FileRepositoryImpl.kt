@@ -77,4 +77,13 @@ class FileRepositoryImpl @Inject constructor(
     override suspend fun getFilesByCategory(category: String): List<FileItem> {
         return dao.getByCategory(category).map { it.toDomain() }
     }
+
+    override suspend fun getFilesByFolderKeyword(folderKeyword: String, category: String?, limit: Int): List<FileItem> {
+        val entities = if (category != null) {
+            dao.getFilesByFolderAndCategory(folderKeyword, category, limit)
+        } else {
+            dao.getFilesByFolderKeyword(folderKeyword, limit)
+        }
+        return entities.map { it.toDomain() }
+    }
 }

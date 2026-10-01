@@ -70,6 +70,7 @@ sealed interface StorageIntent {
         val minSizeBytes: Long? = null,
         val category: FileCategory? = null,
         val recentDays: Int? = null,
+        val folderKeyword: String? = null,
         val label: String
     ) : StorageIntent
 }

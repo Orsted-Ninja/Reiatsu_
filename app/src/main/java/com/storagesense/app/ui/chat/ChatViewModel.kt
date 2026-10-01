@@ -144,6 +144,12 @@ class ChatViewModel @Inject constructor(
 
             is StorageIntent.Filter -> {
                 val files: List<FileItem> = when {
+                    intent.folderKeyword != null -> {
+                        fileRepository.getFilesByFolderKeyword(
+                            folderKeyword = intent.folderKeyword,
+                            category = intent.category?.name
+                        )
+                    }
                     intent.category != null -> {
                         fileRepository.getFilesByCategory(intent.category.name)
                     }

@@ -58,6 +58,12 @@ interface FileMetadataDao {
     @Query("SELECT * FROM file_metadata WHERE lastModifiedEpochMs >= :sinceEpochMs ORDER BY lastModifiedEpochMs DESC LIMIT :limit")
     suspend fun getRecentFiles(sinceEpochMs: Long, limit: Int = 50): List<FileMetadataEntity>
 
+    @Query("SELECT * FROM file_metadata WHERE path LIKE '%' || :folderKeyword || '%' ORDER BY sizeBytes DESC LIMIT :limit")
+    suspend fun getFilesByFolderKeyword(folderKeyword: String, limit: Int = 50): List<FileMetadataEntity>
+
+    @Query("SELECT * FROM file_metadata WHERE path LIKE '%' || :folderKeyword || '%' AND category = :category ORDER BY sizeBytes DESC LIMIT :limit")
+    suspend fun getFilesByFolderAndCategory(folderKeyword: String, category: String, limit: Int = 50): List<FileMetadataEntity>
+
     @Query("DELETE FROM file_metadata WHERE path = :path")
     suspend fun deleteByPath(path: String)
 }

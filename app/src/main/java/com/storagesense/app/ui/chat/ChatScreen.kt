@@ -224,6 +224,10 @@ fun ChatScreen(
                     onClick = { viewModel.onSendMessage("Show recent downloads") }
                 )
                 SuggestionChip(
+                    text = "💬 WhatsApp files",
+                    onClick = { viewModel.onSendMessage("Show WhatsApp files") }
+                )
+                SuggestionChip(
                     text = "🔄 Remove duplicates",
                     onClick = { viewModel.onSendMessage("Remove duplicate assignments, keep latest") }
                 )

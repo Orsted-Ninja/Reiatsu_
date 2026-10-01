@@ -150,27 +150,60 @@ class FileScanner @Inject constructor() {
     fun getDefaultScanRoots(): List<File> {
         val roots = mutableListOf<File>()
         try {
-            val external = Environment.getExternalStorageDirectory()
-            if (external != null && external.exists()) {
-                val subDirs = listOf(
-                    "Documents",
-                    "Download",
-                    "Pictures",
-                    "DCIM",
-                    "Movies",
-                    "Music"
-                )
-                for (sub in subDirs) {
-                    val dir = File(external, sub)
-                    if (dir.exists()) roots.add(dir)
+            val external = Environment.getExternalStorageDirectory() ?: return emptyList()
+            if (!external.exists()) return emptyList()
+
+            // 1. Standard Media & Documents Folders
+            val standardDirs = listOf(
+                "Documents",
+                "Download",
+                "Pictures",
+                "DCIM",
+                "Movies",
+                "Music"
+            )
+            for (sub in standardDirs) {
+                val dir = File(external, sub)
+                if (dir.exists()) roots.add(dir)
+            }
+
+            // 2. WhatsApp & Messaging Media Locations (Major source of file sharing)
+            val messagingMediaDirs = listOf(
+                "Android/media/com.whatsapp/WhatsApp/Media",
+                "Android/media/com.whatsapp.w4b/WhatsApp Business/Media",
+                "WhatsApp/Media",
+                "Telegram",
+                "Android/media/org.telegram.messenger"
+            )
+            for (sub in messagingMediaDirs) {
+                val dir = File(external, sub)
+                if (dir.exists()) roots.add(dir)
+            }
+
+            // 3. User custom top-level directories (e.g. Books, College, Work)
+            val topLevel = external.listFiles() ?: emptyArray()
+            for (entry in topLevel) {
+                if (!entry.isDirectory) continue
+                val name = entry.name
+                // Skip hidden, trash, and restricted Android system sandboxes
+                if (name.startsWith(".") ||
+                    name.equals(".storagesense", ignoreCase = true) ||
+                    name.equals("Android", ignoreCase = true) ||
+                    standardDirs.any { it.equals(name, ignoreCase = true) } ||
+                    name.equals("WhatsApp", ignoreCase = true) ||
+                    name.equals("Telegram", ignoreCase = true)) {
+                    continue
                 }
-                // Also add root external if specific subdirs empty
-                if (roots.isEmpty()) roots.add(external)
+                roots.add(entry)
+            }
+
+            if (roots.isEmpty()) {
+                roots.add(external)
             }
         } catch (e: Exception) {
             // Handled
         }
-        return roots
+        return roots.distinctBy { it.absolutePath }
     }
 }
 

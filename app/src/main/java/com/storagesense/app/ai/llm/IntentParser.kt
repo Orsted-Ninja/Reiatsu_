@@ -41,7 +41,23 @@ class IntentParser @Inject constructor(
             }
         }
 
-        // 3. Category Queries
+        // 3. WhatsApp & Messaging Specific Queries
+        if (lower.contains("whatsapp") || lower.contains("whats app")) {
+            val cat = when {
+                lower.contains("pdf") || lower.contains("document") || lower.contains("doc") -> FileCategory.DOCUMENT_PDF
+                lower.contains("video") -> FileCategory.VIDEO
+                lower.contains("photo") || lower.contains("picture") || lower.contains("image") -> FileCategory.IMAGE_PHOTO
+                else -> null
+            }
+            val title = if (cat != null) "WhatsApp ${cat.name.replace('_', ' ')}" else "WhatsApp Media & Files"
+            return StorageIntent.Filter(folderKeyword = "whatsapp", category = cat, label = title)
+        }
+
+        if (lower.contains("telegram")) {
+            return StorageIntent.Filter(folderKeyword = "telegram", label = "Telegram Downloads & Media")
+        }
+
+        // 4. Category Queries
         when {
             lower.contains("all pdf") || lower.contains("pdf documents") || lower.contains("show pdfs") || lower == "pdfs" -> {
                 return StorageIntent.Filter(category = FileCategory.DOCUMENT_PDF, label = "PDF Documents")

@@ -20,4 +20,5 @@ interface FileRepository {
     suspend fun getLargestFiles(limit: Int = 20): List<FileItem>
     suspend fun getRecentFiles(sinceEpochMs: Long, limit: Int = 50): List<FileItem>
     suspend fun getFilesByCategory(category: String): List<FileItem>
+    suspend fun getFilesByFolderKeyword(folderKeyword: String, category: String? = null, limit: Int = 50): List<FileItem>
 }
