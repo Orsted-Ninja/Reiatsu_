@@ -9,6 +9,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
@@ -97,11 +98,16 @@ fun MainAppContent(
             }
         }
     ) { innerPadding ->
-        Modifier.padding(innerPadding)
-        when (currentScreen) {
-            is Screen.Chat -> ChatScreen(viewModel = chatViewModel)
-            is Screen.Dashboard -> DashboardScreen(viewModel = dashboardViewModel)
-            is Screen.Settings -> SettingsScreen()
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            when (currentScreen) {
+                is Screen.Chat -> ChatScreen(viewModel = chatViewModel)
+                is Screen.Dashboard -> DashboardScreen(viewModel = dashboardViewModel)
+                is Screen.Settings -> SettingsScreen()
+            }
         }
     }
 }

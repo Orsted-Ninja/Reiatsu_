@@ -44,15 +44,14 @@ abstract class StorageSenseDatabase : RoomDatabase() {
                     .addCallback(object : Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             super.onCreate(db)
-                            // Create SQLite FTS5 virtual table for lightning-fast BM25 keyword matching
+                            // Create SQLite FTS4 virtual table for lightning-fast keyword matching
                             db.execSQL(
                                 """
-                                CREATE VIRTUAL TABLE IF NOT EXISTS file_fts USING fts5(
-                                    file_id UNINDEXED,
+                                CREATE VIRTUAL TABLE IF NOT EXISTS file_fts USING fts4(
+                                    file_id,
                                     filename,
                                     content,
-                                    page_number UNINDEXED,
-                                    tokenize = 'unicode61'
+                                    page_number
                                 );
                                 """.trimIndent()
                             )
@@ -62,12 +61,11 @@ abstract class StorageSenseDatabase : RoomDatabase() {
                             super.onOpen(db)
                             db.execSQL(
                                 """
-                                CREATE VIRTUAL TABLE IF NOT EXISTS file_fts USING fts5(
-                                    file_id UNINDEXED,
+                                CREATE VIRTUAL TABLE IF NOT EXISTS file_fts USING fts4(
+                                    file_id,
                                     filename,
                                     content,
-                                    page_number UNINDEXED,
-                                    tokenize = 'unicode61'
+                                    page_number
                                 );
                                 """.trimIndent()
                             )
