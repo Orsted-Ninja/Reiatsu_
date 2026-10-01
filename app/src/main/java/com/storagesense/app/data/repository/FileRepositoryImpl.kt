@@ -1,0 +1,64 @@
+package com.storagesense.app.data.repository
+
+import com.storagesense.app.data.local.room.FileMetadataDao
+import com.storagesense.app.data.local.room.entity.FileMetadataEntity
+import com.storagesense.app.domain.model.FileItem
+import com.storagesense.app.domain.repository.FileRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class FileRepositoryImpl @Inject constructor(
+    private val dao: FileMetadataDao
+) : FileRepository {
+
+    override suspend fun insertOrUpdate(file: FileItem): Long {
+        return dao.insertOrUpdate(FileMetadataEntity.fromDomain(file))
+    }
+
+    override suspend fun insertAll(files: List<FileItem>) {
+        dao.insertAll(files.map { FileMetadataEntity.fromDomain(it) })
+    }
+
+    override suspend fun getFileById(id: Long): FileItem? {
+        return dao.getById(id)?.toDomain()
+    }
+
+    override suspend fun getFileByPath(path: String): FileItem? {
+        return dao.getByPath(path)?.toDomain()
+    }
+
+    override suspend fun getAllFiles(): List<FileItem> {
+        return dao.getAll().map { it.toDomain() }
+    }
+
+    override fun observeAllFiles(): Flow<List<FileItem>> {
+        return dao.observeAll().map { list -> list.map { it.toDomain() } }
+    }
+
+    override suspend fun getFilesByHash(hash: String): List<FileItem> {
+        return dao.getByHash(hash).map { it.toDomain() }
+    }
+
+    override suspend fun getAllWithHashes(): List<FileItem> {
+        return dao.getAllWithHashes().map { it.toDomain() }
+    }
+
+    override suspend fun deleteFileRecord(id: Long) {
+        dao.deleteById(id)
+    }
+
+    override suspend fun getTotalIndexedCount(): Int {
+        return dao.getCount()
+    }
+
+    override suspend fun getTotalStorageBytes(): Long {
+        return dao.getTotalStorageBytes()
+    }
+
+    override suspend fun updatePath(id: Long, newPath: String) {
+        dao.updatePath(id, newPath)
+    }
+}

@@ -1,0 +1,123 @@
+package com.storagesense.app.indexing
+
+import com.storagesense.app.ai.clip.MobileCLIPModel
+import com.storagesense.app.ai.embedding.TextEmbeddingModel
+import com.storagesense.app.ai.ocr.OcrEngine
+import com.storagesense.app.data.extractor.ExtractorFactory
+import com.storagesense.app.domain.model.FileCategory
+import com.storagesense.app.domain.model.FileItem
+import com.storagesense.app.domain.repository.FileRepository
+import com.storagesense.app.domain.repository.SearchRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class IndexingPipeline @Inject constructor(
+    private val extractorFactory: ExtractorFactory,
+    private val textChunker: TextChunker,
+    private val textEmbeddingModel: TextEmbeddingModel,
+    private val mobileClipModel: MobileCLIPModel,
+    private val ocrEngine: OcrEngine,
+    private val fileRepository: FileRepository,
+    private val searchRepository: SearchRepository
+) {
+    /**
+     * Fully indexes a file: extracts text/OCR, creates chunks, computes embeddings, and stores index.
+     */
+    suspend fun indexFile(fileItem: FileItem): Boolean = withContext(Dispatchers.IO) {
+        val file = File(fileItem.path)
+        if (!file.exists() || !file.canRead()) return@withContext false
+
+        // 1. Ensure file record exists in database
+        val fileId = if (fileItem.id == 0L) {
+            fileRepository.insertOrUpdate(fileItem)
+        } else {
+            fileItem.id
+        }
+
+        try {
+            when (fileItem.category) {
+                FileCategory.DOCUMENT_PDF,
+                FileCategory.DOCUMENT_WORD,
+                FileCategory.DOCUMENT_SLIDES,
+                FileCategory.DOCUMENT_TEXT -> {
+                    indexDocument(file, fileId, fileItem)
+                }
+
+                FileCategory.IMAGE_PHOTO,
+                FileCategory.IMAGE_SCREENSHOT -> {
+                    indexImage(file, fileId, fileItem)
+                }
+
+                else -> {
+                    // For archives, videos, installers: index filename in FTS for quick keyword lookup
+                    searchRepository.indexDocumentText(
+                        fileId = fileId,
+                        filename = fileItem.name,
+                        textChunks = listOf(fileItem.name),
+                        embeddings = null
+                    )
+                }
+            }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private suspend fun indexDocument(file: File, fileId: Long, fileItem: FileItem) {
+        val extractor = extractorFactory.getExtractor(fileItem.extension) ?: return
+        val extraction = extractor.extractText(file)
+
+        var contentText = extraction.fullText
+        if (extraction.needsOcrFallback && contentText.length < 50) {
+            // PDF OCR fallback
+            val ocr = ocrEngine.recognizeText(file)
+            if (ocr.fullText.isNotBlank()) {
+                contentText = ocr.fullText
+            }
+        }
+
+        if (contentText.isBlank()) {
+            contentText = fileItem.name
+        }
+
+        // Chunk document text (400 tokens / ~1600 chars, 80 tokens / ~320 chars overlap)
+        val chunks = textChunker.chunk(contentText)
+        val chunkTexts = chunks.map { it.text }
+
+        // Batch embed chunks
+        val embeddings = chunkTexts.map { textEmbeddingModel.embed(it) }
+
+        searchRepository.indexDocumentText(
+            fileId = fileId,
+            filename = fileItem.name,
+            textChunks = chunkTexts,
+            embeddings = embeddings
+        )
+    }
+
+    private suspend fun indexImage(file: File, fileId: Long, fileItem: FileItem) {
+        // Fast Tier 1: OCR text extraction
+        val ocrResult = ocrEngine.recognizeText(file)
+        if (ocrResult.fullText.isNotBlank()) {
+            searchRepository.indexDocumentText(
+                fileId = fileId,
+                filename = fileItem.name,
+                textChunks = listOf(ocrResult.fullText),
+                embeddings = listOf(textEmbeddingModel.embed(ocrResult.fullText))
+            )
+        }
+
+        // Fast Tier 1: MobileCLIP image embedding (512-dim)
+        val clipVec = mobileClipModel.embedImage(file)
+        searchRepository.indexImage(
+            fileId = fileId,
+            ocrText = ocrResult.fullText,
+            clipEmbedding = clipVec
+        )
+    }
+}
