@@ -16,4 +16,8 @@ interface FileRepository {
     suspend fun getTotalIndexedCount(): Int
     suspend fun getTotalStorageBytes(): Long
     suspend fun updatePath(id: Long, newPath: String)
+    suspend fun getFilesLargerThan(minBytes: Long, limit: Int = 50): List<FileItem>
+    suspend fun getLargestFiles(limit: Int = 20): List<FileItem>
+    suspend fun getRecentFiles(sinceEpochMs: Long, limit: Int = 50): List<FileItem>
+    suspend fun getFilesByCategory(category: String): List<FileItem>
 }

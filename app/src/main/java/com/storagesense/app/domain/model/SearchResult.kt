@@ -5,7 +5,8 @@ enum class SearchSource {
     VECTOR,
     HYBRID_RRF,
     IMAGE_CLIP,
-    IMAGE_OCR
+    IMAGE_OCR,
+    METADATA
 }
 
 data class SearchResult(

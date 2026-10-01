@@ -2,6 +2,7 @@ package com.storagesense.app.ai.llm
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.storagesense.app.domain.model.FileCategory
 import com.storagesense.app.domain.model.KeepStrategy
 import com.storagesense.app.domain.model.StorageIntent
 import javax.inject.Inject
@@ -12,14 +13,70 @@ class IntentParser @Inject constructor(
     private val gson: Gson
 ) {
     /**
-     * Parses user input into a strongly-typed StorageIntent.
-     * Uses deterministic pattern recognition first, with JSON extraction and regex fallbacks.
+     * Parses natural language user input into a strongly-typed StorageIntent.
+     * Supports audits, size filters, category views, recency, deduplication, cleanup, and search.
      */
     fun parse(userInput: String): StorageIntent {
         val raw = userInput.trim()
         val lower = raw.lowercase()
 
-        // 1. Direct Pattern Recognition (Fast path, zero latency)
+        // 1. Storage Audit & Space Breakdown
+        if (lower.contains("taking up space") || lower.contains("storage space") ||
+            lower.contains("storage stats") || lower.contains("storage breakdown") ||
+            lower.contains("storage overview") || lower == "storage" || lower == "stats") {
+            return StorageIntent.Audit(showLargest = true)
+        }
+
+        // 2. Largest files / Size queries
+        if (lower.contains("largest files") || lower.contains("biggest files") ||
+            lower.contains("heavy files") || lower.contains("large files") || lower.contains("top files")) {
+            return StorageIntent.Filter(minSizeBytes = 0L, label = "Largest files on your device")
+        }
+
+        val sizeMatch = Regex("(larger|bigger|greater|>|over)\\s+(than\\s+)?(\\d+(\\.\\d+)?\\s*(gb|mb))", RegexOption.IGNORE_CASE).find(lower)
+        if (sizeMatch != null) {
+            val bytes = parseBytes(sizeMatch.value)
+            if (bytes != null) {
+                return StorageIntent.Filter(minSizeBytes = bytes, label = "Files ${sizeMatch.value}")
+            }
+        }
+
+        // 3. Category Queries
+        when {
+            lower.contains("all pdf") || lower.contains("pdf documents") || lower.contains("show pdfs") || lower == "pdfs" -> {
+                return StorageIntent.Filter(category = FileCategory.DOCUMENT_PDF, label = "PDF Documents")
+            }
+            lower.contains("word docs") || lower.contains("word documents") || lower.contains("show docx") -> {
+                return StorageIntent.Filter(category = FileCategory.DOCUMENT_WORD, label = "Word Documents")
+            }
+            lower.contains("presentations") || lower.contains("slides") || lower.contains("show ppt") -> {
+                return StorageIntent.Filter(category = FileCategory.DOCUMENT_SLIDES, label = "Presentations")
+            }
+            lower.contains("apk") || lower.contains("installers") -> {
+                return StorageIntent.Filter(category = FileCategory.INSTALLER, label = "APKs & Installers")
+            }
+            lower.contains("videos") || lower.contains("show video") -> {
+                return StorageIntent.Filter(category = FileCategory.VIDEO, label = "Videos")
+            }
+            lower.contains("screenshots") || lower.contains("show screenshot") -> {
+                return StorageIntent.Filter(category = FileCategory.IMAGE_SCREENSHOT, label = "Screenshots")
+            }
+            lower.contains("photos") || lower.contains("pictures") || lower.contains("images") -> {
+                return StorageIntent.Filter(category = FileCategory.IMAGE_PHOTO, label = "Images & Photos")
+            }
+            lower.contains("archives") || lower.contains("zip files") -> {
+                return StorageIntent.Filter(category = FileCategory.ARCHIVE, label = "Archives & Zip files")
+            }
+        }
+
+        // 4. Recency Queries
+        if (lower.contains("recent downloads") || lower.contains("recent files") ||
+            lower.contains("downloads from") || lower.contains("from this week") ||
+            lower.contains("latest files") || lower.contains("downloaded recently")) {
+            return StorageIntent.Filter(recentDays = 7, label = "Recent files (last 7 days)")
+        }
+
+        // 5. Cleanup
         if (lower.startsWith("free up") || lower.contains("clean up") || lower.contains("cleanup")) {
             val bytes = parseBytes(lower) ?: (5L * 1024L * 1024L * 1024L) // default 5 GB
             return StorageIntent.Cleanup(
@@ -28,6 +85,7 @@ class IntentParser @Inject constructor(
             )
         }
 
+        // 6. Deduplication
         if (lower.contains("duplicate") || lower.contains("dupes") || lower.contains("dedup")) {
             val keepStrategy = when {
                 lower.contains("largest") -> KeepStrategy.KEEP_LARGEST
@@ -40,6 +98,7 @@ class IntentParser @Inject constructor(
             )
         }
 
+        // 7. Delete
         if (lower.startsWith("delete ") || lower.startsWith("remove ") || lower.startsWith("trash ")) {
             val query = raw.replace(Regex("^(delete|remove|trash)\\s+", RegexOption.IGNORE_CASE), "").trim()
             val permanent = lower.contains("permanently") || lower.contains("forever")
@@ -49,6 +108,7 @@ class IntentParser @Inject constructor(
             )
         }
 
+        // 8. Summarize
         if (lower.startsWith("summarize ") || lower.startsWith("what is in ") || lower.startsWith("explain ")) {
             val subject = raw.replace(Regex("^(summarize|what is in|explain)\\s+", RegexOption.IGNORE_CASE), "").trim()
             return StorageIntent.Summarize(
@@ -57,18 +117,17 @@ class IntentParser @Inject constructor(
             )
         }
 
-        // 2. Check if input is a JSON string emitted by LLM
+        // 9. JSON string check
         if (raw.startsWith("{") && raw.endsWith("}")) {
             tryParseJson(raw)?.let { return it }
         }
 
-        // Check if input contains embedded JSON block ```json ... ```
         val jsonMatch = Regex("\\{.*\\}", RegexOption.DOT_MATCHES_ALL).find(raw)
         if (jsonMatch != null) {
             tryParseJson(jsonMatch.value)?.let { return it }
         }
 
-        // 3. Image Search Intent Detection
+        // 10. Default: Content & Semantic Search
         val isImage = lower.contains("screenshot") || lower.contains("photo") ||
                 lower.contains("image") || lower.contains("receipt") || lower.contains("picture")
 

@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
@@ -120,6 +122,43 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            // Live Indexing Progress Banner
+            if (uiState.indexProgress.isRunning) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = uiState.indexProgress.message,
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            if (uiState.indexProgress.totalToIndex > 0) {
+                                Text(
+                                    text = "${uiState.indexProgress.indexedCount} of ${uiState.indexProgress.totalToIndex} documents indexed",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Chat message list
             LazyColumn(
                 state = listState,
@@ -169,20 +208,28 @@ fun ChatScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 SuggestionChip(
-                    text = "Find DBMS notes",
-                    onClick = { viewModel.onSendMessage("Find all my DBMS notes") }
+                    text = "📊 Space breakdown",
+                    onClick = { viewModel.onSendMessage("What is taking up space?") }
                 )
                 SuggestionChip(
-                    text = "Remove duplicates",
+                    text = "📦 Largest files",
+                    onClick = { viewModel.onSendMessage("Show my largest files") }
+                )
+                SuggestionChip(
+                    text = "📄 Show all PDFs",
+                    onClick = { viewModel.onSendMessage("Show all PDFs") }
+                )
+                SuggestionChip(
+                    text = "⚡ Recent downloads",
+                    onClick = { viewModel.onSendMessage("Show recent downloads") }
+                )
+                SuggestionChip(
+                    text = "🔄 Remove duplicates",
                     onClick = { viewModel.onSendMessage("Remove duplicate assignments, keep latest") }
                 )
                 SuggestionChip(
-                    text = "Free up 5 GB",
+                    text = "🧹 Free up 5 GB",
                     onClick = { viewModel.onSendMessage("Free up 5 GB without deleting important") }
-                )
-                SuggestionChip(
-                    text = "Screenshots of notes",
-                    onClick = { viewModel.onSendMessage("Show screenshots of handwritten notes") }
                 )
             }
 

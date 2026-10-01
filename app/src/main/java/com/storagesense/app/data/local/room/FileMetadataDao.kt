@@ -49,6 +49,15 @@ interface FileMetadataDao {
     @Query("DELETE FROM file_metadata WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    @Query("SELECT * FROM file_metadata WHERE sizeBytes >= :minBytes ORDER BY sizeBytes DESC LIMIT :limit")
+    suspend fun getFilesLargerThan(minBytes: Long, limit: Int = 50): List<FileMetadataEntity>
+
+    @Query("SELECT * FROM file_metadata ORDER BY sizeBytes DESC LIMIT :limit")
+    suspend fun getLargestFiles(limit: Int = 20): List<FileMetadataEntity>
+
+    @Query("SELECT * FROM file_metadata WHERE lastModifiedEpochMs >= :sinceEpochMs ORDER BY lastModifiedEpochMs DESC LIMIT :limit")
+    suspend fun getRecentFiles(sinceEpochMs: Long, limit: Int = 50): List<FileMetadataEntity>
+
     @Query("DELETE FROM file_metadata WHERE path = :path")
     suspend fun deleteByPath(path: String)
 }

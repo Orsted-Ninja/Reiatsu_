@@ -96,6 +96,24 @@ class SafeFileOps @Inject constructor(
         }
     }
 
+    fun getTrashStats(): Pair<Int, Long> {
+        val dir = getTrashDirectory()
+        val files = dir.listFiles() ?: return Pair(0, 0L)
+        val count = files.size
+        val totalBytes = files.sumOf { it.length() }
+        return Pair(count, totalBytes)
+    }
+
+    suspend fun emptyTrash(): Int = withContext(Dispatchers.IO) {
+        val dir = getTrashDirectory()
+        val files = dir.listFiles() ?: return@withContext 0
+        var deleted = 0
+        for (f in files) {
+            if (f.delete()) deleted++
+        }
+        deleted
+    }
+
     private fun moveFile(src: File, dest: File): Boolean {
         // First try atomic rename
         if (src.renameTo(dest)) {

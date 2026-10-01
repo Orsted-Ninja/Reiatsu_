@@ -61,4 +61,20 @@ class FileRepositoryImpl @Inject constructor(
     override suspend fun updatePath(id: Long, newPath: String) {
         dao.updatePath(id, newPath)
     }
+
+    override suspend fun getFilesLargerThan(minBytes: Long, limit: Int): List<FileItem> {
+        return dao.getFilesLargerThan(minBytes, limit).map { it.toDomain() }
+    }
+
+    override suspend fun getLargestFiles(limit: Int): List<FileItem> {
+        return dao.getLargestFiles(limit).map { it.toDomain() }
+    }
+
+    override suspend fun getRecentFiles(sinceEpochMs: Long, limit: Int): List<FileItem> {
+        return dao.getRecentFiles(sinceEpochMs, limit).map { it.toDomain() }
+    }
+
+    override suspend fun getFilesByCategory(category: String): List<FileItem> {
+        return dao.getByCategory(category).map { it.toDomain() }
+    }
 }

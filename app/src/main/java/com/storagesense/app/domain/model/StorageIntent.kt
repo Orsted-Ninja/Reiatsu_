@@ -54,6 +54,24 @@ sealed interface StorageIntent {
     data class ChatOnly(
         val message: String
     ) : StorageIntent
+
+    /**
+     * Storage audit: breakdown of space, categories, and largest items
+     */
+    data class Audit(
+        val category: FileCategory? = null,
+        val showLargest: Boolean = true
+    ) : StorageIntent
+
+    /**
+     * Filter files by metadata (size, category, or recency)
+     */
+    data class Filter(
+        val minSizeBytes: Long? = null,
+        val category: FileCategory? = null,
+        val recentDays: Int? = null,
+        val label: String
+    ) : StorageIntent
 }
 
 enum class KeepStrategy {

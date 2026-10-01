@@ -6,12 +6,17 @@ import com.storagesense.app.action.ActionEngine
 import com.storagesense.app.ai.llm.IntentParser
 import com.storagesense.app.ai.llm.RagEngine
 import com.storagesense.app.domain.model.ActionProposal
-import com.storagesense.app.domain.model.ActionType
+import com.storagesense.app.domain.model.FileItem
+import com.storagesense.app.domain.model.SearchResult
+import com.storagesense.app.domain.model.SearchSource
 import com.storagesense.app.domain.model.StorageIntent
+import com.storagesense.app.domain.repository.FileRepository
 import com.storagesense.app.domain.usecase.DuplicateDetectionUseCase
 import com.storagesense.app.domain.usecase.ExecuteActionUseCase
 import com.storagesense.app.domain.usecase.HybridSearchUseCase
 import com.storagesense.app.domain.usecase.SpaceReclaimerUseCase
+import com.storagesense.app.indexing.IndexProgress
+import com.storagesense.app.indexing.StorageIndexManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +27,8 @@ import javax.inject.Inject
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val isProcessing: Boolean = false,
-    val pendingApproval: ActionProposal? = null
+    val pendingApproval: ActionProposal? = null,
+    val indexProgress: IndexProgress = IndexProgress()
 )
 
 @HiltViewModel
@@ -33,7 +39,9 @@ class ChatViewModel @Inject constructor(
     private val spaceReclaimerUseCase: SpaceReclaimerUseCase,
     private val executeActionUseCase: ExecuteActionUseCase,
     private val actionEngine: ActionEngine,
-    private val ragEngine: RagEngine
+    private val ragEngine: RagEngine,
+    private val fileRepository: FileRepository,
+    private val storageIndexManager: StorageIndexManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -43,13 +51,29 @@ class ChatViewModel @Inject constructor(
         // Initial greeting
         addAssistantMessage(
             "Hello! I am **StorageSense**, your on-device AI storage assistant.\n\n" +
-                    "I understand the *content* inside your files — not just their names.\n" +
+                    "I analyze the real files and documents on your phone.\n" +
                     "Try asking me:\n" +
-                    "• *\"Find all my DBMS notes\"*\n" +
+                    "• *\"What is taking up space?\"*\n" +
+                    "• *\"Show my largest files\"*\n" +
+                    "• *\"Find all my PDFs\"*\n" +
                     "• *\"Remove duplicate assignments, keep latest\"*\n" +
-                    "• *\"Free up 5 GB without deleting important\"*\n" +
-                    "• *\"Show screenshots of handwritten notes\"*"
+                    "• *\"Free up 5 GB without deleting important\"*"
         )
+
+        // Observe background indexing progress
+        viewModelScope.launch {
+            storageIndexManager.progress.collect { prog ->
+                _uiState.value = _uiState.value.copy(indexProgress = prog)
+            }
+        }
+
+        // Auto-start scan on launch if database is empty
+        viewModelScope.launch {
+            val count = fileRepository.getTotalIndexedCount()
+            if (count == 0) {
+                storageIndexManager.startScan()
+            }
+        }
     }
 
     fun onSendMessage(userText: String) {
@@ -80,6 +104,83 @@ class ChatViewModel @Inject constructor(
         val intent = intentParser.parse(userInput)
 
         when (intent) {
+            is StorageIntent.Audit -> {
+                val totalFiles = fileRepository.getTotalIndexedCount()
+                val totalBytes = fileRepository.getTotalStorageBytes()
+                val largest = fileRepository.getLargestFiles(5)
+
+                if (totalFiles == 0) {
+                    addAssistantMessage("No files indexed yet. I have started a scan of your storage right now!")
+                    storageIndexManager.startScan()
+                    return
+                }
+
+                val sb = StringBuilder()
+                sb.append("📊 **Storage Overview**\n\n")
+                sb.append("• **Total Discovered:** $totalFiles files (${formatBytes(totalBytes)})\n\n")
+                if (largest.isNotEmpty()) {
+                    sb.append("**Top ${largest.size} Largest Files:**\n")
+                    for ((idx, file) in largest.withIndex()) {
+                        sb.append("${idx + 1}. **${file.name}** — ${formatBytes(file.sizeBytes)}\n")
+                    }
+                }
+
+                val searchResults = largest.map {
+                    SearchResult(
+                        file = it,
+                        matchedSnippet = "Consuming ${formatBytes(it.sizeBytes)} in ${it.path}",
+                        score = 1.0f,
+                        source = SearchSource.METADATA
+                    )
+                }
+
+                val msg = ChatMessage(
+                    sender = MessageSender.ASSISTANT,
+                    text = sb.toString(),
+                    searchResults = searchResults
+                )
+                _uiState.value = _uiState.value.copy(messages = _uiState.value.messages + msg)
+            }
+
+            is StorageIntent.Filter -> {
+                val files: List<FileItem> = when {
+                    intent.category != null -> {
+                        fileRepository.getFilesByCategory(intent.category.name)
+                    }
+                    intent.recentDays != null -> {
+                        val since = System.currentTimeMillis() - (intent.recentDays.toLong() * 24L * 60L * 60L * 1000L)
+                        fileRepository.getRecentFiles(since, 50)
+                    }
+                    intent.minSizeBytes != null && intent.minSizeBytes > 0L -> {
+                        fileRepository.getFilesLargerThan(intent.minSizeBytes, 50)
+                    }
+                    else -> {
+                        fileRepository.getLargestFiles(20)
+                    }
+                }
+
+                if (files.isEmpty()) {
+                    addAssistantMessage("No files found matching **${intent.label}**.")
+                    return
+                }
+
+                val searchResults = files.take(30).map { file ->
+                    SearchResult(
+                        file = file,
+                        matchedSnippet = "${file.category.name.replace('_', ' ')} • ${formatBytes(file.sizeBytes)}",
+                        score = 1.0f,
+                        source = SearchSource.METADATA
+                    )
+                }
+
+                val msg = ChatMessage(
+                    sender = MessageSender.ASSISTANT,
+                    text = "Found **${files.size} files** matching **${intent.label}**:",
+                    searchResults = searchResults
+                )
+                _uiState.value = _uiState.value.copy(messages = _uiState.value.messages + msg)
+            }
+
             is StorageIntent.Search -> {
                 val results = hybridSearchUseCase(
                     query = intent.query,
@@ -190,7 +291,9 @@ class ChatViewModel @Inject constructor(
             }
 
             is StorageIntent.Summarize -> {
-                addAssistantMessage("Storage summary: All file contents are indexed locally and searchable without internet.")
+                val totalFiles = fileRepository.getTotalIndexedCount()
+                val totalBytes = fileRepository.getTotalStorageBytes()
+                addAssistantMessage("Storage summary: $totalFiles files (${formatBytes(totalBytes)}) indexed locally on your device. Zero cloud, 100% offline.")
             }
 
             is StorageIntent.ChatOnly -> {
@@ -227,6 +330,10 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    fun triggerScan() {
+        storageIndexManager.startScan(force = true)
+    }
+
     private fun addAssistantMessage(text: String) {
         val msg = ChatMessage(
             sender = MessageSender.ASSISTANT,
@@ -235,7 +342,7 @@ class ChatViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(messages = _uiState.value.messages + msg)
     }
 
-    private fun updateMessage(id: String, text: String, isStreaming: Boolean, results: List<com.storagesense.app.domain.model.SearchResult>) {
+    private fun updateMessage(id: String, text: String, isStreaming: Boolean, results: List<SearchResult>) {
         val updated = _uiState.value.messages.map {
             if (it.id == id) it.copy(text = text, isStreaming = isStreaming, searchResults = results) else it
         }

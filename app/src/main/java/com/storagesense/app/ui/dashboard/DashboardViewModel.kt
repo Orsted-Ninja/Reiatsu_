@@ -5,8 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.storagesense.app.domain.model.FileCategory
 import com.storagesense.app.domain.model.FileItem
 import com.storagesense.app.domain.repository.FileRepository
-import com.storagesense.app.indexing.FileScanner
-import com.storagesense.app.indexing.IndexingPipeline
+import com.storagesense.app.indexing.StorageIndexManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -59,8 +58,7 @@ data class DashboardUiState(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val fileRepository: FileRepository,
-    private val fileScanner: FileScanner,
-    private val indexingPipeline: IndexingPipeline
+    private val storageIndexManager: StorageIndexManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -71,6 +69,14 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             fileRepository.observeAllFiles().collect { files ->
                 calculateStats(files)
+            }
+        }
+        viewModelScope.launch {
+            storageIndexManager.progress.collect { prog ->
+                _uiState.value = _uiState.value.copy(isScanning = prog.isRunning)
+                if (!prog.isRunning) {
+                    loadStats()
+                }
             }
         }
     }
@@ -111,18 +117,6 @@ class DashboardViewModel @Inject constructor(
     }
 
     fun triggerScan() {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isScanning = true)
-            try {
-                val scanned = fileScanner.scanDirectories()
-                for (item in scanned) {
-                    fileRepository.insertOrUpdate(item)
-                    indexingPipeline.indexFile(item)
-                }
-                loadStats()
-            } finally {
-                _uiState.value = _uiState.value.copy(isScanning = false)
-            }
-        }
+        storageIndexManager.startScan(force = true)
     }
 }
