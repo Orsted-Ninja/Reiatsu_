@@ -1,0 +1,20 @@
+# Allow all standard search engines
+User-agent: *
+Disallow: /assets/private/
+Disallow: /drafts/
+Disallow: /cgi-bin/
+Disallow: /*?*             # Blocks duplicate parameter URLs/search queries
+Disallow: /*.json$         # Optional: prevents raw data blobs from cluttering index
+Disallow: /*.xml$          # Optional: prevents direct indexing of metadata feeds
+
+# Allow crawler access to essential frontend assets
+Allow: /*.css$
+Allow: /*.js$
+Allow: /*.png$
+Allow: /*.jpg$
+Allow: /*.jpeg$
+Allow: /*.webp$
+Allow: /*.svg$
+
+# Reference your sitemap (replace with your actual URL)
+Sitemap: https://yourusername.github.io/your-repo/sitemap.xml
