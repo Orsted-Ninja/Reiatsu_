@@ -53,13 +53,37 @@ class SearchDao @Inject constructor(
         db.execSQL("DELETE FROM file_fts WHERE file_id = ?", arrayOf(fileId.toString()))
     }
 
+    private var cachedTotalDocs: Long = 0L
+    private var lastDocCountTimestamp: Long = 0L
+
+    private fun getTotalDocCount(): Long {
+        val now = System.currentTimeMillis()
+        if (cachedTotalDocs > 0 && (now - lastDocCountTimestamp) < 30_000L) {
+            return cachedTotalDocs
+        }
+        return try {
+            val cursor = db.query("SELECT count(*) FROM file_fts", emptyArray())
+            cursor.use {
+                if (it.moveToFirst()) {
+                    cachedTotalDocs = it.getLong(0).coerceAtLeast(1L)
+                    lastDocCountTimestamp = now
+                }
+            }
+            cachedTotalDocs.coerceAtLeast(1L)
+        } catch (e: Exception) {
+            cachedTotalDocs.coerceAtLeast(100L)
+        }
+    }
+
     /**
-     * Executes SQLite FTS4 MATCH with matchinfo('pcx') scoring.
-     * Compatible with standard Android SQLite (which does not include FTS5).
+     * Executes SQLite FTS4 MATCH with Okapi BM25 matchinfo('pcx') scoring.
+     * Compatible with standard Android SQLite FTS4 virtual tables.
      */
     suspend fun searchBm25(sanitizedQuery: String, limit: Int = 50): List<FtsMatch> {
         val results = mutableListOf<FtsMatch>()
         if (sanitizedQuery.isBlank()) return results
+
+        val totalDocs = getTotalDocCount()
 
         val sql = """
             SELECT file_id, filename, snippet(file_fts, '<b>', '</b>', '...', -1, 32) AS snippet,
@@ -83,13 +107,12 @@ class SearchDao @Inject constructor(
                     val fname = it.getString(nameCol) ?: ""
                     val snip = it.getString(snippetCol) ?: ""
                     val matchBytes = if (!it.isNull(dataCol)) it.getBlob(dataCol) else null
-                    val score = calculateScore(matchBytes)
+                    val score = calculateScore(matchBytes, totalDocs)
                     val page = if (it.isNull(pageCol)) null else it.getString(pageCol)?.toIntOrNull()
                     results.add(FtsMatch(fId, fname, snip, score, page))
                 }
             }
         } catch (e: Exception) {
-            // Log or fallback safely
             e.printStackTrace()
         }
 
@@ -98,9 +121,11 @@ class SearchDao @Inject constructor(
     }
 
     /**
-     * Calculates BM25 / TF-IDF style relevance score from FTS4 matchinfo('pcx')
+     * Calculates authentic Okapi BM25 relevance score from FTS4 matchinfo('pcx').
+     * Incorporates term frequency saturation (k1=1.2), column weights (filename=5.0, content=1.0),
+     * and logarithmic Inverse Document Frequency (IDF).
      */
-    private fun calculateScore(blob: ByteArray?): Float {
+    private fun calculateScore(blob: ByteArray?, totalDocs: Long): Float {
         if (blob == null || blob.size < 8) return 1.0f
         return try {
             val buffer = ByteBuffer.wrap(blob).order(ByteOrder.LITTLE_ENDIAN)
@@ -109,6 +134,8 @@ class SearchDao @Inject constructor(
 
             // Weight per column: file_id = 0.0, filename = 5.0, content = 1.0, page_number = 0.0
             val weights = floatArrayOf(0.0f, 5.0f, 1.0f, 0.0f)
+            val k1 = 1.2f
+            val nDocs = totalDocs.toFloat().coerceAtLeast(1.0f)
             var totalScore = 0.0f
 
             for (phrase in 0 until p) {
@@ -118,9 +145,14 @@ class SearchDao @Inject constructor(
                     val docsWithHits = buffer.int
 
                     val weight = if (col < weights.size) weights[col] else 1.0f
-                    if (hitsThisRow > 0) {
-                        val tf = hitsThisRow.toFloat() / (hitsThisRow + 1.0f)
-                        totalScore += tf * weight
+                    if (hitsThisRow > 0 && weight > 0f) {
+                        // Okapi BM25 TF saturation
+                        val tf = (hitsThisRow * (k1 + 1.0f)) / (hitsThisRow + k1)
+                        // Okapi BM25 IDF: ln(1 + (N - n + 0.5) / (n + 0.5))
+                        val n = docsWithHits.toFloat().coerceAtLeast(1.0f)
+                        val idf = kotlin.math.ln(1.0f + ((nDocs - n + 0.5f) / (n + 0.5f))).coerceAtLeast(0.1f)
+
+                        totalScore += tf * idf * weight
                     }
                 }
             }

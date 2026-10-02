@@ -81,6 +81,7 @@ import com.storagesense.app.domain.model.SearchSource
 import com.storagesense.app.ui.components.EmptyStateView
 import com.storagesense.app.ui.components.FileDetailSheet
 import com.storagesense.app.ui.components.VoiceQueryDialog
+import com.storagesense.app.ui.viewer.UniversalFileViewer
 import com.storagesense.app.ui.theme.SensePrimary
 import com.storagesense.app.ui.theme.StorageArchive
 import com.storagesense.app.ui.theme.StorageAudio
@@ -103,6 +104,7 @@ fun SearchScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var selectedFileForDetail by remember { mutableStateOf<FileItem?>(null) }
+    var previewingFile by remember { mutableStateOf<FileItem?>(null) }
     var showVoiceDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.actionResultMessage) {
@@ -442,7 +444,19 @@ fun SearchScreen(
             onDismiss = { selectedFileForDetail = null },
             onDeleteRequest = { f ->
                 viewModel.deleteFile(f)
+            },
+            onViewInApp = { f ->
+                selectedFileForDetail = null
+                previewingFile = f
             }
+        )
+    }
+
+    // In-App Universal File & Media Viewer
+    previewingFile?.let { file ->
+        UniversalFileViewer(
+            file = file,
+            onDismiss = { previewingFile = null }
         )
     }
 }

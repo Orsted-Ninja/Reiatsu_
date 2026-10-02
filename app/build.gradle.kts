@@ -104,6 +104,10 @@ dependencies {
     // PDF Extraction
     implementation(libs.pdfbox.android)
 
+    // In-App Media Playback (ExoPlayer)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
+
     // ONNX Runtime for Vector Embeddings (MiniLM, MobileCLIP)
     implementation(libs.onnxruntime.android)
 

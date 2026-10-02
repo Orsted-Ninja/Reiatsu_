@@ -98,6 +98,7 @@ import com.storagesense.app.ui.theme.VaultSecondary
 import com.storagesense.app.ui.theme.VaultSurfaceContainer
 import com.storagesense.app.ui.theme.VaultSurfaceContainerHigh
 import com.storagesense.app.ui.theme.VaultSurfaceContainerLow
+import com.storagesense.app.ui.viewer.UniversalFileViewer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,6 +112,7 @@ fun ChatScreen(
     var showPrivacySheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
     var selectedFileForDetail by remember { mutableStateOf<FileItem?>(null) }
+    var previewingFile by remember { mutableStateOf<FileItem?>(null) }
     val context = LocalContext.current
     var isListening by remember { mutableStateOf(false) }
 
@@ -424,7 +426,8 @@ fun ChatScreen(
                                     message = message,
                                     onFileClick = { file -> selectedFileForDetail = file },
                                     onActionProposalClick = { proposal -> viewModel.onConfirmAction(proposal) },
-                                    onDeleteFile = { file -> viewModel.requestDeleteFile(file) }
+                                    onDeleteFile = { file -> viewModel.requestDeleteFile(file) },
+                                    onOpenInApp = { file -> previewingFile = file }
                                 )
                             }
 
@@ -609,7 +612,19 @@ fun ChatScreen(
         FileDetailSheet(
             file = file,
             onDismiss = { selectedFileForDetail = null },
-            onDeleteRequest = { f -> viewModel.deleteFileDirectly(f) }
+            onDeleteRequest = { f -> viewModel.deleteFileDirectly(f) },
+            onViewInApp = { f ->
+                selectedFileForDetail = null
+                previewingFile = f
+            }
+        )
+    }
+
+    // In-App Universal File & Media Viewer
+    previewingFile?.let { file ->
+        UniversalFileViewer(
+            file = file,
+            onDismiss = { previewingFile = null }
         )
     }
 }
@@ -622,7 +637,8 @@ fun VaultChatMessageItem(
     message: ChatMessage,
     onFileClick: (FileItem) -> Unit,
     onActionProposalClick: (ActionProposal) -> Unit,
-    onDeleteFile: ((FileItem) -> Unit)? = null
+    onDeleteFile: ((FileItem) -> Unit)? = null,
+    onOpenInApp: ((FileItem) -> Unit)? = null
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val isUser = message.sender == MessageSender.USER
@@ -740,8 +756,13 @@ fun VaultChatMessageItem(
                                 message.searchResults.forEach { res ->
                                     FileResultCard(
                                         result = res,
-                                        onClick = { onFileClick(res.file) },
-                                        onOpen = { com.storagesense.app.ui.util.FileActionHelper.openFile(context, it) },
+                                        onOpen = { file ->
+                                            if (onOpenInApp != null) {
+                                                onOpenInApp(file)
+                                            } else {
+                                                com.storagesense.app.ui.util.FileActionHelper.openFile(context, file)
+                                            }
+                                        },
                                         onDelete = onDeleteFile
                                     )
                                 }

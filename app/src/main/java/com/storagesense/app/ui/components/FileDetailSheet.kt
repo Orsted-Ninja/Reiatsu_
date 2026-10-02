@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Movie
@@ -89,7 +90,8 @@ import java.util.Locale
 fun FileDetailSheet(
     file: FileItem,
     onDismiss: () -> Unit,
-    onDeleteRequest: ((FileItem) -> Unit)? = null
+    onDeleteRequest: ((FileItem) -> Unit)? = null,
+    onViewInApp: ((FileItem) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -148,7 +150,10 @@ fun FileDetailSheet(
                         1.dp,
                         MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
                         RoundedCornerShape(16.dp)
-                    ),
+                    )
+                    .clickable(enabled = onViewInApp != null) {
+                        onViewInApp?.invoke(file)
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 if (isImage) {
@@ -227,17 +232,45 @@ fun FileDetailSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Button(
-                    onClick = {
-                        openFileExternally(context, file)
-                    },
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Open", maxLines = 1, softWrap = false)
+                if (onViewInApp != null) {
+                    Button(
+                        onClick = {
+                            onViewInApp(file)
+                        },
+                        modifier = Modifier.weight(1.1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Preview", maxLines = 1, softWrap = false)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            openFileExternally(context, file)
+                        },
+                        modifier = Modifier.weight(0.9f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("App", maxLines = 1, softWrap = false)
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            openFileExternally(context, file)
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Open", maxLines = 1, softWrap = false)
+                    }
                 }
 
                 FilledTonalButton(

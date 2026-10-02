@@ -62,7 +62,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.storagesense.app.domain.model.FileItem
 import com.storagesense.app.ui.components.FileDetailSheet
+import com.storagesense.app.ui.viewer.UniversalFileViewer
 import com.storagesense.app.ui.components.StorageSegment
 import com.storagesense.app.ui.components.VaultArcGauge
 import com.storagesense.app.ui.theme.AmbientGiltGlow
@@ -90,6 +92,7 @@ fun ViewScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedMediaForDetail by remember { mutableStateOf<MediaItem?>(null) }
+    var previewingFile by remember { mutableStateOf<FileItem?>(null) }
     var activeRepositoryFilter by remember { mutableStateOf<CollectionType?>(null) }
 
     LaunchedEffect(uiState.actionResultMessage) {
@@ -270,7 +273,19 @@ fun ViewScreen(
             onDeleteRequest = { _ ->
                 viewModel.deleteMediaItem(media)
                 selectedMediaForDetail = null
+            },
+            onViewInApp = { f ->
+                selectedMediaForDetail = null
+                previewingFile = f
             }
+        )
+    }
+
+    // In-App Universal File & Media Viewer
+    previewingFile?.let { file ->
+        UniversalFileViewer(
+            file = file,
+            onDismiss = { previewingFile = null }
         )
     }
 }

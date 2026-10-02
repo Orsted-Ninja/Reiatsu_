@@ -21,8 +21,8 @@ class FileScanner @Inject constructor(
 ) {
 
     companion object {
-        const val LARGE_FILE_THRESHOLD_BYTES = 512L * 1024L // 512 KB
-        const val FAST_HASH_SAMPLE_BYTES = 64L * 1024L // 64 KB
+        const val LARGE_FILE_THRESHOLD_BYTES = 10L * 1024L * 1024L // 10 MB (per plan_project.md specification)
+        const val FAST_HASH_SAMPLE_BYTES = 1L * 1024L * 1024L // 1 MB (head & tail sample)
     }
 
     /**

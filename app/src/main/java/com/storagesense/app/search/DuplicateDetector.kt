@@ -47,14 +47,17 @@ class DuplicateDetector @Inject constructor(
                 if (realFile.exists()) fileScanner.computeSha256(realFile) else fileItem.sha256Hash ?: ""
             }.filter { it.key.isNotEmpty() && it.value.size > 1 }
 
-            for ((_, sameHashFiles) in fastHashGroups) {
-                // For files larger than threshold, verify with full SHA-256 to guarantee 100% exact match
+            for ((fastHash, sameHashFiles) in fastHashGroups) {
+                // For files larger than 10MB threshold, verify with full SHA-256 across entire file to guarantee 100% exact match
                 val fullHashGroups = sameHashFiles.groupBy { fileItem ->
-                    if (fileItem.sizeBytes > FileScanner.LARGE_FILE_THRESHOLD_BYTES) {
-                        val realFile = File(fileItem.path)
-                        if (realFile.exists()) fileScanner.computeFullSha256(realFile) else fileItem.sha256Hash ?: ""
-                    } else {
+                    val realFile = File(fileItem.path)
+                    if (!realFile.exists()) {
                         fileItem.sha256Hash ?: ""
+                    } else if (fileItem.sizeBytes > FileScanner.LARGE_FILE_THRESHOLD_BYTES) {
+                        fileScanner.computeFullSha256(realFile)
+                    } else {
+                        // For files <= 10 MB, fast hash is already computed from the complete file stream
+                        fastHash
                     }
                 }.filter { it.key.isNotEmpty() && it.value.size > 1 }
 
