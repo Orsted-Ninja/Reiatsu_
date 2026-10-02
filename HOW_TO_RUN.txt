@@ -1,0 +1,44 @@
+========================================================================
+             StorageSense — How to Run (Zero Commands Needed)
+========================================================================
+
+You DO NOT need to type any long command line commands. We have set up 
+3 simple, 1-click ways to run StorageSense:
+
+------------------------------------------------------------------------
+Option 1: From Your Windows Desktop (Easiest!)
+------------------------------------------------------------------------
+Look at your Desktop: you will see an icon called "StorageSense".
+Simply DOUBLE-CLICK IT!
+It will automatically start the AI engine and open your web browser 
+to the StorageSense Dashboard (http://localhost:8501).
+
+------------------------------------------------------------------------
+Option 2: Double-Click "Start_StorageSense.bat"
+------------------------------------------------------------------------
+In this folder (F:\ASCENT\idea), just DOUBLE-CLICK:
+   👉 Start_StorageSense.bat
+
+That's it! It starts everything and launches your browser.
+
+------------------------------------------------------------------------
+Option 3: Interactive Menu ("StorageSense_Assistant.bat")
+------------------------------------------------------------------------
+If you prefer a quick numbered menu without opening a browser:
+Just DOUBLE-CLICK:
+   👉 StorageSense_Assistant.bat
+
+You will see:
+   [1] Open Desktop Dashboard
+   [2] View Live System Telemetry
+   [3] Scan & Index a Folder
+   [4] Search Files with AI Synthesis
+   [5] Scan for Duplicate Files
+   [6] Propose Space Cleanup
+   [7] Exit
+
+Just type 1, 2, 3, etc. and press Enter!
+
+========================================================================
+               Everything runs 100% locally and safely!
+========================================================================

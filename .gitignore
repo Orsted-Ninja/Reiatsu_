@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local Databases and Vector Stores
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+chroma_db/
+.cache/
+.trash/
+
+# Logs and runtime artifacts
+logs/
+*.log
+
+# Environments and Secrets
+.env
+.venv
+env/
+venv/
+ENV/
+
+# OS artifacts
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Temporary files
+*.tmp
+*.temp
