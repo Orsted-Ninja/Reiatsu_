@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.res.Configuration
 import com.storagesense.app.ai.clip.MobileCLIPModel
 import com.storagesense.app.ai.embedding.TextEmbeddingModel
+import com.storagesense.app.ai.llm.OnDeviceLlmEngine
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +28,8 @@ enum class ModelState {
 class ModelManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val textEmbeddingModel: TextEmbeddingModel,
-    private val mobileClipModel: MobileCLIPModel
+    private val mobileClipModel: MobileCLIPModel,
+    private val onDeviceLlmEngine: OnDeviceLlmEngine
 ) : ComponentCallbacks2 {
 
     private val mutex = Mutex()
@@ -41,6 +43,14 @@ class ModelManager @Inject constructor(
 
     init {
         context.registerComponentCallbacks(this)
+    }
+
+    fun getLlmStatus(): String {
+        return if (onDeviceLlmEngine.isModelAvailable()) {
+            "Active: ${onDeviceLlmEngine.getDetectedModelName()}"
+        } else {
+            "Ready (Listening to /sdcard/StorageSense/models)"
+        }
     }
 
     suspend fun acquireEmbeddingModels() = mutex.withLock {
@@ -76,6 +86,7 @@ class ModelManager @Inject constructor(
             textEmbeddingModel.unload()
             mobileClipModel.unload()
         }
+        onDeviceLlmEngine.initialize()
         currentState = ModelState.LLM_LOADED
     }
 
@@ -85,7 +96,7 @@ class ModelManager @Inject constructor(
     }
 
     private fun unloadLlmInternal() {
-        // Unload LLM session if present
+        onDeviceLlmEngine.unload()
     }
 
     fun isLowMemory(): Boolean {

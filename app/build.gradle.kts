@@ -64,7 +64,7 @@ android {
     }
 
     androidResources {
-        noCompress += listOf("onnx", "tflite")
+        noCompress += listOf("onnx", "tflite", "bin", "litertlm", "task")
     }
 }
 
@@ -109,6 +109,9 @@ dependencies {
 
     // ML Kit OCR (bundled offline text recognition)
     implementation(libs.mlkit.text.recognition)
+
+    // Google MediaPipe Tasks GenAI for 100% On-Device Gemma Inference
+    implementation(libs.mediapipe.tasks.genai)
 
     // Utilities
     implementation(libs.kotlinx.coroutines.core)

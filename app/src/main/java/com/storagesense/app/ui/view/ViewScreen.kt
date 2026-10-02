@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -198,14 +199,26 @@ fun ViewScreen(
                 }
 
                 // 5. Active Vault Repositories (Cards)
-                val repositories = listOf(
-                    VaultRepoData("Cinematic Exports", "Large 4K & Raw Videos", Icons.Default.Movie, CollectionType.LARGE_FILES, "84.2 GB", 42),
-                    VaultRepoData("Raw Photo Vault", "Uncompressed Camera RAW", Icons.Default.Image, CollectionType.RECENTLY_ADDED, "124.6 GB", 1280),
-                    VaultRepoData("Encrypted Records", "Financials & Documents", Icons.Default.Description, CollectionType.OLD_FILES, "9.4 GB", 314),
-                    VaultRepoData("Cold Archives", "ZIP / 7Z / TAR Containers", Icons.Default.Archive, CollectionType.RECENTLY_OPENED, "48.6 GB", 14),
-                    VaultRepoData("Redundant Copies", "Cryptographic Duplicates", Icons.Default.Refresh, CollectionType.DUPLICATES, "32.4 GB", 340),
-                    VaultRepoData("Transient Cache", "App Cache & Stale Temp", Icons.Default.Security, CollectionType.RECENTLY_DELETED, "2.4 GB", 86)
-                )
+                val repositories = uiState.collections.map { collection ->
+                    val icon = when (collection.type) {
+                        CollectionType.DUPLICATES -> Icons.Default.Refresh
+                        CollectionType.LARGE_FILES -> Icons.Default.Movie
+                        CollectionType.RECENTLY_ADDED -> Icons.Default.Image
+                        CollectionType.RECENTLY_OPENED -> Icons.Default.Description
+                        CollectionType.OLD_FILES -> Icons.Default.Archive
+                        CollectionType.RECENTLY_DELETED -> Icons.Default.Security
+                        CollectionType.WHATSAPP_MEDIA -> Icons.Default.Send
+                        CollectionType.TELEGRAM_MEDIA -> Icons.Default.Send
+                    }
+                    VaultRepoData(
+                        title = collection.title,
+                        subtitle = collection.subtitle,
+                        icon = icon,
+                        type = collection.type,
+                        formattedSize = collection.formattedSize,
+                        count = collection.count
+                    )
+                }
 
                 items(repositories) { repo ->
                     val isSelected = activeRepositoryFilter == repo.type

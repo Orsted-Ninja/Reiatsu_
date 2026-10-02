@@ -61,7 +61,9 @@ enum class CollectionType {
     RECENTLY_ADDED,
     RECENTLY_OPENED,
     OLD_FILES,
-    RECENTLY_DELETED
+    RECENTLY_DELETED,
+    WHATSAPP_MEDIA,
+    TELEGRAM_MEDIA
 }
 
 enum class SortOption {
@@ -365,6 +367,12 @@ class ViewViewModel @Inject constructor(
                 CollectionType.RECENTLY_DELETED -> {
                     emptyList()
                 }
+                CollectionType.WHATSAPP_MEDIA -> {
+                    allFiles.filter { it.path.contains("WhatsApp", ignoreCase = true) }
+                }
+                CollectionType.TELEGRAM_MEDIA -> {
+                    allFiles.filter { it.path.contains("Telegram", ignoreCase = true) }
+                }
             }
 
             val title = when (collection) {
@@ -374,6 +382,8 @@ class ViewViewModel @Inject constructor(
                 CollectionType.RECENTLY_OPENED -> "Recently Opened"
                 CollectionType.OLD_FILES -> "Old Files (> 6 Months)"
                 CollectionType.RECENTLY_DELETED -> "Recently Deleted (Trash)"
+                CollectionType.WHATSAPP_MEDIA -> "WhatsApp Media"
+                CollectionType.TELEGRAM_MEDIA -> "Telegram Media"
             }
 
             _uiState.value = _uiState.value.copy(
@@ -723,13 +733,18 @@ class ViewViewModel @Inject constructor(
 
         val trashStats = safeFileOps.getTrashStats()
 
+        val whatsappFiles = files.filter { it.path.contains("WhatsApp", ignoreCase = true) }
+        val telegramFiles = files.filter { it.path.contains("Telegram", ignoreCase = true) }
+
         val collections = listOf(
             CollectionCardData(CollectionType.DUPLICATES, "Duplicates", "Identical duplicate files", duplicateDeleteItems.size, duplicateBytes, StorageDuplicate, if (duplicateBytes > 0) "${formatBytes(duplicateBytes)} reclaimable" else null),
             CollectionCardData(CollectionType.LARGE_FILES, "Large files", "Files above 100 MB", largeFiles.size, largeFiles.sumOf { it.sizeBytes }, StorageVideo),
             CollectionCardData(CollectionType.RECENTLY_ADDED, "Recently added", "Saved in past 7 days", recentAdded.size, recentAdded.sumOf { it.sizeBytes }, StorageDoc),
             CollectionCardData(CollectionType.RECENTLY_OPENED, "Recently opened", "Active files on device", files.take(30).size, files.take(30).sumOf { it.sizeBytes }, StoragePhoto),
             CollectionCardData(CollectionType.OLD_FILES, "Old files", "Unmodified in 6+ months", oldFiles.size, oldFiles.sumOf { it.sizeBytes }, StorageOther),
-            CollectionCardData(CollectionType.RECENTLY_DELETED, "Recently deleted", "Staged in Trash (30 days)", trashStats.first, trashStats.second, StorageArchive)
+            CollectionCardData(CollectionType.RECENTLY_DELETED, "Recently deleted", "Staged in Trash (30 days)", trashStats.first, trashStats.second, StorageArchive),
+            CollectionCardData(CollectionType.WHATSAPP_MEDIA, "WhatsApp Media", "Received images & videos", whatsappFiles.size, whatsappFiles.sumOf { it.sizeBytes }, StoragePhoto),
+            CollectionCardData(CollectionType.TELEGRAM_MEDIA, "Telegram Media", "Downloaded from Telegram", telegramFiles.size, telegramFiles.sumOf { it.sizeBytes }, StoragePhoto)
         )
 
         val insights = mutableListOf<StorageInsight>()

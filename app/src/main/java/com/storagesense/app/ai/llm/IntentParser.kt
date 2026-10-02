@@ -10,15 +10,33 @@ import javax.inject.Singleton
 
 @Singleton
 class IntentParser @Inject constructor(
-    private val gson: Gson
+    private val gson: Gson,
+    private val llmEngine: OnDeviceLlmEngine
 ) {
     /**
      * Parses natural language user input into a strongly-typed StorageIntent.
-     * Supports audits, size filters, category views, recency, deduplication, cleanup, and search.
+     * Uses deterministic fast-paths for instant response, and Gemma on-device LLM for complex queries.
      */
-    fun parse(userInput: String): StorageIntent {
+    suspend fun parse(userInput: String): StorageIntent {
         val raw = userInput.trim()
         val lower = raw.lowercase()
+
+        // 0. Fast-path Undo & Safety Help Queries
+        if (lower.contains("how to undo") || lower.contains("how do i undo") ||
+            lower.contains("how can i undo") || lower.contains("how to restore")) {
+            return StorageIntent.Help(topic = "undo")
+        }
+
+        if (lower == "undo" || lower.startsWith("undo ") || lower.contains("undo deletion") ||
+            lower.contains("undo last") || lower.contains("restore last") || lower == "restore" ||
+            lower == "revert") {
+            return StorageIntent.Undo(query = raw)
+        }
+
+        // Fast path for explicit JSON
+        if (raw.startsWith("{") && raw.endsWith("}")) {
+            tryParseJson(raw)?.let { return it }
+        }
 
         // 1. Storage Audit & Space Breakdown
         if (lower.contains("taking up space") || lower.contains("storage space") ||
@@ -57,103 +75,63 @@ class IntentParser @Inject constructor(
             return StorageIntent.Filter(folderKeyword = "telegram", label = "Telegram Downloads & Media")
         }
 
-        // 4. Category Queries
-        when {
-            lower.contains("all pdf") || lower.contains("pdf documents") || lower.contains("show pdfs") || lower == "pdfs" -> {
-                return StorageIntent.Filter(category = FileCategory.DOCUMENT_PDF, label = "PDF Documents")
-            }
-            lower.contains("word docs") || lower.contains("word documents") || lower.contains("show docx") -> {
-                return StorageIntent.Filter(category = FileCategory.DOCUMENT_WORD, label = "Word Documents")
-            }
-            lower.contains("presentations") || lower.contains("slides") || lower.contains("show ppt") -> {
-                return StorageIntent.Filter(category = FileCategory.DOCUMENT_SLIDES, label = "Presentations")
-            }
-            lower.contains("apk") || lower.contains("installers") -> {
-                return StorageIntent.Filter(category = FileCategory.INSTALLER, label = "APKs & Installers")
-            }
-            lower.contains("videos") || lower.contains("show video") -> {
-                return StorageIntent.Filter(category = FileCategory.VIDEO, label = "Videos")
-            }
-            lower.contains("screenshots") || lower.contains("show screenshot") -> {
-                return StorageIntent.Filter(category = FileCategory.IMAGE_SCREENSHOT, label = "Screenshots")
-            }
-            lower.contains("photos") || lower.contains("pictures") || lower.contains("images") -> {
-                return StorageIntent.Filter(category = FileCategory.IMAGE_PHOTO, label = "Images & Photos")
-            }
-            lower.contains("archives") || lower.contains("zip files") -> {
-                return StorageIntent.Filter(category = FileCategory.ARCHIVE, label = "Archives & Zip files")
+        // 4. If On-Device Gemma LLM is available, use it for intelligent intent extraction
+        if (llmEngine.isModelAvailable()) {
+            val prompt = """
+You are the StorageSense intent classifier. The user wants to manage their Android files.
+Analyze this input: "$raw"
+Output ONLY a valid JSON object with an "action" and "query" or other parameters. No markdown formatting or explanation.
+
+Actions:
+- SEARCH: User wants to find files (e.g. "find pdfs", "show cat pics") -> {"action": "SEARCH", "query": "pdfs", "is_image": false}
+- DEDUPLICATE: User wants to find/remove duplicates (e.g. "dedup downloads") -> {"action": "DEDUPLICATE", "query": "downloads"}
+- CLEANUP: User wants to free up space (e.g. "free up 2 gb") -> {"action": "CLEANUP", "target_gb": 2.0}
+- DELETE: User wants to delete something specific (e.g. "delete old assignments") -> {"action": "DELETE", "query": "old assignments"}
+- SUMMARIZE: User asks about space or stats (e.g. "what is taking up space") -> {"action": "SUMMARIZE", "query": ""}
+- UNDO: User wants to reverse a deletion -> {"action": "UNDO", "query": ""}
+- AUDIT: User asks for an overview of their storage -> {"action": "AUDIT", "query": ""}
+
+Output JSON:
+""".trimIndent()
+
+            var jsonResponse = ""
+            try {
+                llmEngine.streamGenerate(prompt).collect { chunk ->
+                    jsonResponse += chunk
+                }
+                val cleanJson = jsonResponse.replace("```json", "").replace("```", "").trim()
+                tryParseJson(cleanJson)?.let { return it }
+            } catch (_: Exception) {
+                // Fallback to pattern matching
             }
         }
 
-        // 4. Recency Queries
-        if (lower.contains("recent downloads") || lower.contains("recent files") ||
-            lower.contains("downloads from") || lower.contains("from this week") ||
-            lower.contains("latest files") || lower.contains("downloaded recently")) {
-            return StorageIntent.Filter(recentDays = 7, label = "Recent files (last 7 days)")
+        // 5. Pattern Match Fallback
+        val isDeduplicate = lower.contains("duplicate") || lower.contains("dupe") || lower.contains("dedup")
+        val isCleanup = lower.contains("clean") || lower.contains("free up") || lower.contains("clear space")
+        val isDelete = lower.startsWith("delete") || lower.startsWith("remove") || lower.startsWith("trash")
+
+        if (isDeduplicate) {
+            val cleanQuery = raw.replace(Regex("(?i)(remove|find|delete|show|detect)\\s+(all\\s+)?(duplicate[s]?|dupe[s]?)\\s*(of|in)?"), "").trim()
+            return StorageIntent.Deduplicate(targetQuery = cleanQuery.ifEmpty { null })
         }
 
-        // 5. Cleanup
-        if (lower.startsWith("free up") || lower.contains("clean up") || lower.contains("cleanup")) {
-            val bytes = parseBytes(lower) ?: (5L * 1024L * 1024L * 1024L) // default 5 GB
-            return StorageIntent.Cleanup(
-                targetBytes = bytes,
-                protectImportant = true
-            )
+        if (isCleanup) {
+            val targetBytes = parseTargetBytes(raw) ?: (5L * 1024L * 1024L * 1024L)
+            return StorageIntent.Cleanup(targetBytes = targetBytes)
         }
 
-        // 6. Deduplication
-        if (lower.contains("duplicate") || lower.contains("dupes") || lower.contains("dedup")) {
-            val keepStrategy = when {
-                lower.contains("largest") -> KeepStrategy.KEEP_LARGEST
-                lower.contains("shortest") -> KeepStrategy.KEEP_SHORTEST_PATH
-                else -> KeepStrategy.KEEP_LATEST
-            }
-            return StorageIntent.Deduplicate(
-                targetQuery = extractSubject(raw, listOf("duplicate", "dupes", "deduplicate")),
-                keepStrategy = keepStrategy
-            )
+        if (isDelete) {
+            val query = raw.replace(Regex("(?i)^(delete|remove|trash)\\s+"), "").trim()
+            return StorageIntent.Delete(query = query, permanent = false)
         }
 
-        // 7. Delete
-        if (lower.startsWith("delete ") || lower.startsWith("remove ") || lower.startsWith("trash ")) {
-            val query = raw.replace(Regex("^(delete|remove|trash)\\s+", RegexOption.IGNORE_CASE), "").trim()
-            val permanent = lower.contains("permanently") || lower.contains("forever")
-            return StorageIntent.Delete(
-                query = query,
-                permanent = permanent
-            )
-        }
+        // Clean search query prefix
+        val cleanQuery = raw
+            .replace(Regex("(?i)^(find|search|show|get|list|locate|display)\\s+(all\\s+)?(my\\s+)?"), "")
+            .trim()
 
-        // 8. Summarize
-        if (lower.startsWith("summarize ") || lower.startsWith("what is in ") || lower.startsWith("explain ")) {
-            val subject = raw.replace(Regex("^(summarize|what is in|explain)\\s+", RegexOption.IGNORE_CASE), "").trim()
-            return StorageIntent.Summarize(
-                targetPath = null,
-                query = subject
-            )
-        }
-
-        // 9. JSON string check
-        if (raw.startsWith("{") && raw.endsWith("}")) {
-            tryParseJson(raw)?.let { return it }
-        }
-
-        val jsonMatch = Regex("\\{.*\\}", RegexOption.DOT_MATCHES_ALL).find(raw)
-        if (jsonMatch != null) {
-            tryParseJson(jsonMatch.value)?.let { return it }
-        }
-
-        // 10. Default: Content & Semantic Search
-        val isImage = lower.contains("screenshot") || lower.contains("photo") ||
-                lower.contains("image") || lower.contains("receipt") || lower.contains("picture")
-
-        val cleanedQuery = raw.replace(Regex("^(find|search|show|get|list|display)\\s+(all\\s+)?(my\\s+)?", RegexOption.IGNORE_CASE), "").trim()
-
-        return StorageIntent.Search(
-            query = if (cleanedQuery.isNotBlank()) cleanedQuery else raw,
-            isImageSearch = isImage,
-            naturalLanguageExplanation = "Searching your storage for relevant matches"
-        )
+        return StorageIntent.Search(query = cleanQuery.ifEmpty { raw })
     }
 
     private fun tryParseJson(jsonStr: String): StorageIntent? {
@@ -168,7 +146,7 @@ class IntentParser @Inject constructor(
                     StorageIntent.Search(query = query, isImageSearch = isImage)
                 }
                 "DEDUPLICATE" -> {
-                    StorageIntent.Deduplicate(targetQuery = query)
+                    StorageIntent.Deduplicate(targetQuery = query.ifEmpty { null })
                 }
                 "CLEANUP" -> {
                     val gb = obj.get("target_gb")?.asFloat ?: 5.0f
@@ -182,35 +160,32 @@ class IntentParser @Inject constructor(
                 "SUMMARIZE" -> {
                     StorageIntent.Summarize(query = query)
                 }
+                "AUDIT" -> {
+                    StorageIntent.Audit()
+                }
+                "UNDO" -> {
+                    StorageIntent.Undo()
+                }
                 else -> null
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
 
-    private fun parseBytes(input: String): Long? {
-        val gbMatch = Regex("(\\d+(\\.\\d+)?)\\s*gb", RegexOption.IGNORE_CASE).find(input)
-        if (gbMatch != null) {
-            val num = gbMatch.groupValues[1].toDoubleOrNull() ?: return null
-            return (num * 1024.0 * 1024.0 * 1024.0).toLong()
+    private fun parseBytes(text: String): Long? {
+        val numMatch = Regex("(\\d+(\\.\\d+)?)\\s*(gb|mb|kb)", RegexOption.IGNORE_CASE).find(text) ?: return null
+        val num = numMatch.groupValues[1].toDoubleOrNull() ?: return null
+        val unit = numMatch.groupValues[3].uppercase()
+        return when (unit) {
+            "GB" -> (num * 1024 * 1024 * 1024).toLong()
+            "MB" -> (num * 1024 * 1024).toLong()
+            "KB" -> (num * 1024).toLong()
+            else -> null
         }
-
-        val mbMatch = Regex("(\\d+(\\.\\d+)?)\\s*mb", RegexOption.IGNORE_CASE).find(input)
-        if (mbMatch != null) {
-            val num = mbMatch.groupValues[1].toDoubleOrNull() ?: return null
-            return (num * 1024.0 * 1024.0).toLong()
-        }
-
-        return null
     }
 
-    private fun extractSubject(input: String, keywords: List<String>): String? {
-        var result = input
-        for (kw in keywords) {
-            result = result.replace(Regex(kw, RegexOption.IGNORE_CASE), "")
-        }
-        val clean = result.replace(Regex("^(all|my|the|of|for|keep latest|keep|latest|assignments)\\s+", RegexOption.IGNORE_CASE), "").trim()
-        return if (clean.length > 2) clean else null
+    private fun parseTargetBytes(input: String): Long? {
+        return parseBytes(input)
     }
 }

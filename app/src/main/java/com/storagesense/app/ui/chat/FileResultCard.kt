@@ -1,30 +1,26 @@
 package com.storagesense.app.ui.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.remember
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import java.io.File
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
@@ -32,32 +28,46 @@ import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.storagesense.app.domain.model.FileCategory
+import com.storagesense.app.domain.model.FileItem
 import com.storagesense.app.domain.model.SearchResult
+import com.storagesense.app.ui.theme.DangerRed
 import com.storagesense.app.ui.theme.StorageArchive
 import com.storagesense.app.ui.theme.StorageDoc
 import com.storagesense.app.ui.theme.StorageImage
 import com.storagesense.app.ui.theme.StorageOther
 import com.storagesense.app.ui.theme.StoragePdf
 import com.storagesense.app.ui.theme.StorageVideo
+import com.storagesense.app.ui.util.FileActionHelper
+import java.io.File
 
 @Composable
 fun FileResultCard(
     result: SearchResult,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    onOpen: ((FileItem) -> Unit)? = null,
+    onDelete: ((FileItem) -> Unit)? = null
 ) {
+    val context = LocalContext.current
     val file = result.file
     val (badgeColor, badgeIcon) = when (file.category) {
         FileCategory.DOCUMENT_PDF -> Pair(StoragePdf, Icons.Default.PictureAsPdf)
@@ -67,9 +77,17 @@ fun FileResultCard(
         FileCategory.IMAGE_PHOTO,
         FileCategory.IMAGE_SCREENSHOT -> Pair(StorageImage, Icons.Default.Image)
         FileCategory.VIDEO -> Pair(StorageVideo, Icons.Default.Movie)
-        FileCategory.ARCHIVE,
-        FileCategory.INSTALLER -> Pair(StorageArchive, Icons.Default.Folder)
+        FileCategory.ARCHIVE -> Pair(StorageArchive, Icons.Default.Folder)
+        FileCategory.INSTALLER -> Pair(Color(0xFFE67E22), Icons.Default.Warning)
         else -> Pair(StorageOther, Icons.Default.Description)
+    }
+
+    val handleOpen = {
+        if (onOpen != null) {
+            onOpen(file)
+        } else {
+            FileActionHelper.openFile(context, file)
+        }
     }
 
     Card(
@@ -78,10 +96,15 @@ fun FileResultCard(
             .padding(vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = com.storagesense.app.ui.theme.VaultSurfaceContainer.copy(alpha = 0.85f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
         ),
-        border = androidx.compose.foundation.BorderStroke(1.dp, com.storagesense.app.ui.theme.VaultOutlineVariant.copy(alpha = 0.5f)),
-        onClick = onClick
+        onClick = {
+            if (onClick != {}) {
+                onClick()
+            } else {
+                handleOpen()
+            }
+        }
     ) {
         Column(
             modifier = Modifier
@@ -89,42 +112,30 @@ fun FileResultCard(
                 .padding(12.dp)
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     val isImage = file.category == FileCategory.IMAGE_PHOTO ||
-                            file.category == FileCategory.IMAGE_SCREENSHOT ||
-                            file.extension.lowercase() in setOf("jpg", "jpeg", "png", "webp", "gif", "bmp")
+                                  file.category == FileCategory.IMAGE_SCREENSHOT
+                    val imageFile = remember(file.path) { File(file.path) }
 
                     Box(
                         modifier = Modifier
-                            .size(if (isImage) 44.dp else 36.dp)
-                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(badgeColor.copy(alpha = 0.15f))
-                            .border(
-                                width = 1.dp,
-                                color = if (isImage) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f) else Color.Transparent,
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-                            ),
+                            .border(1.dp, badgeColor.copy(alpha = 0.3f), RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isImage) {
-                            val context = LocalContext.current
-                            val imageModel = remember(file.path) {
-                                if (file.path.startsWith("content://")) {
-                                    android.net.Uri.parse(file.path)
-                                } else {
-                                    File(file.path)
-                                }
-                            }
+                        if (isImage && imageFile.exists()) {
                             AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(imageModel)
+                                model = ImageRequest.Builder(LocalContext.current)
+                                    .data(imageFile)
                                     .crossfade(true)
                                     .build(),
                                 contentDescription = file.name,
@@ -160,7 +171,7 @@ fun FileResultCard(
 
                 // Confidence / Relevance chip
                 AssistChip(
-                    onClick = {},
+                    onClick = { handleOpen() },
                     label = {
                         Text(
                             text = "${result.similarityPercent}% match",
@@ -197,6 +208,40 @@ fun FileResultCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Action row: Open & Delete buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = { handleOpen() },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(Icons.Default.OpenInNew, contentDescription = "Open", modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Open", fontSize = 12.sp)
+                }
+
+                if (onDelete != null) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { onDelete(file) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = DangerRed,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }

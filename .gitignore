@@ -15,3 +15,5 @@ captures
 *.tmp
 .storagesense/
 stitch_design/
+*.png
+pc_port/

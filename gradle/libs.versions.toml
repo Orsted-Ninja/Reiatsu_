@@ -18,6 +18,7 @@ coil = "2.7.0"
 pdfbox = "2.0.27.0"
 onnxruntime = "1.18.0"
 mlkitText = "16.0.1"
+mediapipeGenai = "0.10.35"
 coroutines = "1.8.1"
 gson = "2.11.0"
 
@@ -64,6 +65,7 @@ pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref
 # ML & AI
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
+mediapipe-tasks-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipeGenai" }
 
 # Coroutines & JSON
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }

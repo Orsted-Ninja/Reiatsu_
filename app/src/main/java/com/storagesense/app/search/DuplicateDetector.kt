@@ -5,12 +5,17 @@ import com.storagesense.app.ai.embedding.TextEmbeddingModel
 import com.storagesense.app.data.local.room.DocumentChunkDao
 import com.storagesense.app.data.local.room.FileMetadataDao
 import com.storagesense.app.data.local.room.ImageIndexDao
+import com.storagesense.app.data.local.room.entity.DocumentChunkEntity
 import com.storagesense.app.domain.model.DuplicateGroup
 import com.storagesense.app.domain.model.DuplicateType
 import com.storagesense.app.domain.model.FileItem
+import com.storagesense.app.indexing.FileScanner
+import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.abs
+import kotlin.math.sqrt
 
 @Singleton
 class DuplicateDetector @Inject constructor(
@@ -18,32 +23,57 @@ class DuplicateDetector @Inject constructor(
     private val documentChunkDao: DocumentChunkDao,
     private val imageIndexDao: ImageIndexDao,
     private val textEmbeddingModel: TextEmbeddingModel,
-    private val mobileClipModel: MobileCLIPModel
+    private val mobileClipModel: MobileCLIPModel,
+    private val fileScanner: FileScanner
 ) {
     companion object {
+        const val CENTROID_SIMILARITY_GATE = 0.70f
         const val DOCUMENT_SIMILARITY_THRESHOLD = 0.85f
         const val IMAGE_SIMILARITY_THRESHOLD = 0.90f
     }
 
     suspend fun findExactDuplicates(): List<DuplicateGroup> {
-        val filesWithHashes = fileMetadataDao.getDuplicateCandidates().map { it.toDomain() }
-        val grouped = filesWithHashes.groupBy { it.sha256Hash ?: "" }.filter { it.key.isNotEmpty() && it.value.size > 1 }
+        val allFiles = fileMetadataDao.getAll().map { it.toDomain() }
+        val sizeCandidateGroups = allFiles.filter { it.sizeBytes > 0 }
+            .groupBy { it.sizeBytes }
+            .filter { it.value.size > 1 }
 
         val duplicateGroups = mutableListOf<DuplicateGroup>()
-        for ((_, files) in grouped) {
-            val sorted = sortCandidatesByKeepPriority(files)
-            val keep = sorted.first()
-            val remove = sorted.drop(1)
 
-            duplicateGroups.add(
-                DuplicateGroup(
-                    groupId = UUID.randomUUID().toString(),
-                    type = DuplicateType.EXACT_HASH,
-                    similarityScore = 1.0f,
-                    keepCandidate = keep,
-                    deleteCandidates = remove
-                )
-            )
+        for ((_, candidateFiles) in sizeCandidateGroups) {
+            // Compute fast hash only on files that share the exact same byte length
+            val fastHashGroups = candidateFiles.groupBy { fileItem ->
+                val realFile = File(fileItem.path)
+                if (realFile.exists()) fileScanner.computeSha256(realFile) else fileItem.sha256Hash ?: ""
+            }.filter { it.key.isNotEmpty() && it.value.size > 1 }
+
+            for ((_, sameHashFiles) in fastHashGroups) {
+                // For files larger than threshold, verify with full SHA-256 to guarantee 100% exact match
+                val fullHashGroups = sameHashFiles.groupBy { fileItem ->
+                    if (fileItem.sizeBytes > FileScanner.LARGE_FILE_THRESHOLD_BYTES) {
+                        val realFile = File(fileItem.path)
+                        if (realFile.exists()) fileScanner.computeFullSha256(realFile) else fileItem.sha256Hash ?: ""
+                    } else {
+                        fileItem.sha256Hash ?: ""
+                    }
+                }.filter { it.key.isNotEmpty() && it.value.size > 1 }
+
+                for ((_, exactFiles) in fullHashGroups) {
+                    val sorted = sortCandidatesByKeepPriority(exactFiles)
+                    val keep = sorted.first()
+                    val remove = sorted.drop(1)
+
+                    duplicateGroups.add(
+                        DuplicateGroup(
+                            groupId = UUID.randomUUID().toString(),
+                            type = DuplicateType.EXACT_HASH,
+                            similarityScore = 1.0f,
+                            keepCandidate = keep,
+                            deleteCandidates = remove
+                        )
+                    )
+                }
+            }
         }
 
         return duplicateGroups
@@ -55,21 +85,35 @@ class DuplicateDetector @Inject constructor(
 
         val chunksByFile = chunks.groupBy { it.fileId }
         val fileIds = chunksByFile.keys.toList()
+
+        // 1. Precompute normalized document centroids
+        val centroids = mutableMapOf<Long, FloatArray>()
+        for ((fileId, fileChunks) in chunksByFile) {
+            computeCentroid(fileChunks)?.let { centroids[fileId] = it }
+        }
+
         val processedPairs = mutableSetOf<Pair<Long, Long>>()
         val duplicateGroups = mutableListOf<DuplicateGroup>()
 
         for (i in 0 until fileIds.size) {
+            val fileIdA = fileIds[i]
+            val centroidA = centroids[fileIdA] ?: continue
+            val chunksA = chunksByFile[fileIdA] ?: continue
+
             for (j in i + 1 until fileIds.size) {
-                val fileIdA = fileIds[i]
                 val fileIdB = fileIds[j]
+                val centroidB = centroids[fileIdB] ?: continue
+                val chunksB = chunksByFile[fileIdB] ?: continue
 
                 val pair = if (fileIdA < fileIdB) Pair(fileIdA, fileIdB) else Pair(fileIdB, fileIdA)
                 if (processedPairs.contains(pair)) continue
                 processedPairs.add(pair)
 
-                val chunksA = chunksByFile[fileIdA] ?: continue
-                val chunksB = chunksByFile[fileIdB] ?: continue
+                // 2. High-speed Centroid Gate: Only evaluate chunks if overall document theme is similar
+                val centroidSim = textEmbeddingModel.cosineSimilarity(centroidA, centroidB)
+                if (centroidSim < CENTROID_SIMILARITY_GATE) continue
 
+                // 3. Fine-grained chunk alignment
                 var totalSim = 0f
                 var comparisons = 0
 
@@ -107,6 +151,36 @@ class DuplicateDetector @Inject constructor(
         return duplicateGroups
     }
 
+    private fun computeCentroid(chunks: List<DocumentChunkEntity>): FloatArray? {
+        val validEmbeddings = chunks.mapNotNull { it.embedding }
+        if (validEmbeddings.isEmpty()) return null
+
+        val dim = validEmbeddings.first().size
+        val centroid = FloatArray(dim)
+
+        for (emb in validEmbeddings) {
+            for (k in 0 until dim) {
+                centroid[k] += emb[k]
+            }
+        }
+
+        val count = validEmbeddings.size.toFloat()
+        var normSq = 0f
+        for (k in 0 until dim) {
+            centroid[k] /= count
+            normSq += centroid[k] * centroid[k]
+        }
+
+        val norm = sqrt(normSq)
+        if (norm > 1e-6f) {
+            for (k in 0 until dim) {
+                centroid[k] /= norm
+            }
+        }
+
+        return centroid
+    }
+
     suspend fun findNearDuplicateImages(): List<DuplicateGroup> {
         val images = imageIndexDao.getAllWithEmbeddings()
         if (images.size < 2) return emptyList()
@@ -115,16 +189,16 @@ class DuplicateDetector @Inject constructor(
         val processedPairs = mutableSetOf<Pair<Long, Long>>()
 
         for (i in 0 until images.size) {
+            val imgA = images[i]
+            val embA = imgA.clipEmbedding ?: continue
+
             for (j in i + 1 until images.size) {
-                val imgA = images[i]
                 val imgB = images[j]
+                val embB = imgB.clipEmbedding ?: continue
 
                 val pair = if (imgA.fileId < imgB.fileId) Pair(imgA.fileId, imgB.fileId) else Pair(imgB.fileId, imgA.fileId)
                 if (processedPairs.contains(pair)) continue
                 processedPairs.add(pair)
-
-                val embA = imgA.clipEmbedding ?: continue
-                val embB = imgB.clipEmbedding ?: continue
 
                 val sim = mobileClipModel.cosineSimilarity(embA, embB)
                 if (sim >= IMAGE_SIMILARITY_THRESHOLD) {
@@ -150,13 +224,17 @@ class DuplicateDetector @Inject constructor(
 
     /**
      * Determines which file to keep according to rule:
-     * 1. Most recently modified (likely has latest edits)
-     * 2. If dates equal: larger file (higher quality)
-     * 3. If both equal: shorter path (more accessible)
+     * 1. Protected documents (resumes, tax records, IDs) MUST ALWAYS BE KEPT.
+     * 2. Most recently modified (likely has latest edits)
+     * 3. If dates equal: larger file (higher quality)
+     * 4. If both equal: shorter path (more accessible)
      */
     fun sortCandidatesByKeepPriority(files: List<FileItem>): List<FileItem> {
         return files.sortedWith(
-            compareByDescending<FileItem> { it.lastModifiedEpochMs }
+            compareByDescending<FileItem> {
+                if (it.isImportant || fileScanner.isImportantFile(it.name, it.path)) 1 else 0
+            }
+                .thenByDescending { it.lastModifiedEpochMs }
                 .thenByDescending { it.sizeBytes }
                 .thenBy { it.path.length }
         )

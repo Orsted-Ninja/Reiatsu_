@@ -3,11 +3,14 @@ package com.storagesense.app.action
 import com.storagesense.app.data.local.room.ActionLogDao
 import com.storagesense.app.data.local.room.FileMetadataDao
 import com.storagesense.app.data.local.room.entity.ActionLogEntity
+import com.storagesense.app.data.local.room.entity.FileMetadataEntity
 import com.storagesense.app.domain.model.ActionProposal
 import com.storagesense.app.domain.model.ActionResult
 import com.storagesense.app.domain.model.ActionType
+import com.storagesense.app.domain.model.FileCategory
 import com.storagesense.app.domain.model.FileItem
 import com.storagesense.app.domain.repository.ActionRepository
+import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -110,6 +113,24 @@ class ActionEngine @Inject constructor(
             if (restored) {
                 restoredCount++
                 restoredBytes += log.fileSize
+
+                val restoredFile = File(log.originalPath)
+                if (restoredFile.exists()) {
+                    val ext = restoredFile.extension
+                    fileMetadataDao.insertOrUpdate(
+                        FileMetadataEntity(
+                            path = restoredFile.absolutePath,
+                            name = restoredFile.name,
+                            extension = ext,
+                            sizeBytes = restoredFile.length(),
+                            lastModifiedEpochMs = restoredFile.lastModified(),
+                            sha256Hash = null,
+                            category = FileCategory.fromExtension(ext).name,
+                            isImportant = false,
+                            indexedEpochMs = System.currentTimeMillis()
+                        )
+                    )
+                }
             }
         }
 
@@ -120,7 +141,7 @@ class ActionEngine @Inject constructor(
             success = restoredCount > 0,
             affectedFilesCount = restoredCount,
             reclaimedBytes = restoredBytes,
-            message = "Undone! Restored $restoredCount files (${formatBytes(restoredBytes)})",
+            message = "Undone! Restored $restoredCount file(s) (${formatBytes(restoredBytes)})",
             undoAvailable = false
         )
     }

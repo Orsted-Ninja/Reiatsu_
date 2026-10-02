@@ -218,6 +218,78 @@ fun SettingsScreen(
                 }
             }
 
+            // On-Device AI Engine (Gemma via MediaPipe Tasks GenAI)
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Memory,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "On-Device AI Engine",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
+                            Text(
+                                text = if (uiState.isOnDeviceLlmReady) "READY" else "STANDBY",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = if (uiState.isOnDeviceLlmReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "Runtime: Google MediaPipe Tasks GenAI (Snapdragon Adreno GPU / CPU)",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        val modelDesc = if (uiState.onDeviceLlmName != null) {
+                            "Active Local Model: ${uiState.onDeviceLlmName}\nLoaded from on-device storage with Snapdragon hardware acceleration."
+                        } else {
+                            "No Gemma weights detected yet in phone storage.\nActive Fallback: On-Device all-MiniLM-L6-v2 INT8 Neural Embeddings (384-dim) + SQLite FTS4.\n\nTo activate Gemma LLM reasoning:\nCopy 'gemma-2b-it-gpu-int4.bin' or 'gemma-4-e2b-it.litertlm' into '/sdcard/StorageSense/models/' on your phone."
+                        }
+
+                        Text(
+                            text = modelDesc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedButton(
+                            onClick = { viewModel.refreshStats() },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Scan Storage for Model Weights")
+                        }
+                    }
+                }
+            }
+
             // On-Device Intelligence Architecture (Honest Breakdown)
             item {
                 Text(
@@ -246,8 +318,9 @@ fun SettingsScreen(
                             "Local 384-dim Word Vectorizer (Active)"
                         }
                         EngineStatusRow("Neural Embeddings", modelDetail)
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
                         EngineStatusRow("Action Engine", "Two-Phase Safety Preview & Undo Log (Active)")
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
+                        EngineStatusRow("Generative Language Model", uiState.llmModelStatus)
                     }
                 }
             }

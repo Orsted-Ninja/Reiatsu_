@@ -135,9 +135,22 @@ class ChatViewModel @Inject constructor(
                     return
                 }
 
+                val sysStats = com.storagesense.app.ui.util.StorageStatsHelper.getSystemStorageStats()
+                val totalSys = sysStats.first
+                val freeSys = sysStats.second
+                val usedSys = totalSys - freeSys
+                val osReserved = (usedSys - totalBytes).coerceAtLeast(0)
+
                 val sb = StringBuilder()
                 sb.append("📊 **Storage Overview**\n\n")
-                sb.append("• **Total Discovered:** $totalFiles files (${formatBytes(totalBytes)})\n\n")
+                sb.append("📱 **System Drive Used:** ${formatBytes(usedSys)} / ${formatBytes(totalSys)}\n")
+                sb.append("📂 **User Accessible Files (Indexed):** $totalFiles files (${formatBytes(totalBytes)})\n")
+                if (osReserved > 0) {
+                    sb.append("⚙️ **OS & App Sandboxes (Inaccessible):** ${formatBytes(osReserved)}\n\n")
+                } else {
+                    sb.append("\n")
+                }
+
                 if (largest.isNotEmpty()) {
                     sb.append("**Top ${largest.size} Largest Files:**\n")
                     for ((idx, file) in largest.withIndex()) {
@@ -319,7 +332,27 @@ class ChatViewModel @Inject constructor(
             is StorageIntent.Summarize -> {
                 val totalFiles = fileRepository.getTotalIndexedCount()
                 val totalBytes = fileRepository.getTotalStorageBytes()
-                addAssistantMessage("Storage summary: $totalFiles files (${formatBytes(totalBytes)}) indexed locally on your device. Zero cloud, 100% offline.")
+                val sysStats = com.storagesense.app.ui.util.StorageStatsHelper.getSystemStorageStats()
+                val usedSys = sysStats.first - sysStats.second
+                addAssistantMessage("Storage summary: $totalFiles files (${formatBytes(totalBytes)}) indexed locally on your device. Android OS is consuming a total of ${formatBytes(usedSys)}. Zero cloud, 100% offline.")
+            }
+
+            is StorageIntent.Undo -> {
+                onUndo()
+            }
+
+            is StorageIntent.Help -> {
+                if (intent.topic == "undo") {
+                    val helpText = "🔄 **How to Undo Deletions & Actions in StorageSense**:\n\n" +
+                            "StorageSense uses a **Reversible Trash Staging Engine**. When files are removed:\n\n" +
+                            "1. **Undo Button (⮌)**: Tap the **Undo icon** in the top-right toolbar of the Chat or Dashboard screen anytime.\n" +
+                            "2. **Instant Undo Snackbar**: When deleting files from the Dashboard, an **\"UNDO\"** button appears at the bottom of the screen.\n" +
+                            "3. **Chat Command**: Just type *\"undo\"*, *\"undo last deletion\"*, or *\"restore\"* in this chat.\n\n" +
+                            "*(All deleted files are safely preserved in `~/.storagesense/trash/` for 30 days and restored to their original folders with one tap.)*"
+                    addAssistantMessage(helpText)
+                } else {
+                    addAssistantMessage("I am StorageSense, your on-device AI assistant. Ask me to find files, free up space, or remove duplicates.")
+                }
             }
 
             is StorageIntent.ChatOnly -> {
@@ -414,6 +447,14 @@ class ChatViewModel @Inject constructor(
             addAssistantMessage("${result.message}\n\n*Safely moved to .storagesense/trash/ (recoverable for 30 days).*")
             loadStorageOverview()
         }
+    }
+
+    fun requestDeleteFile(file: FileItem) {
+        val proposal = actionEngine.proposeTrash(
+            files = listOf(file),
+            reason = "Move '${file.name}' (${file.formattedSize}) to trash"
+        )
+        _uiState.value = _uiState.value.copy(pendingApproval = proposal)
     }
 
     fun triggerScan() {

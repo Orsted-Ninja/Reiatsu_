@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.QuestionMark
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,8 +52,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import com.storagesense.app.ui.settings.SettingsScreen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -106,6 +109,7 @@ fun ChatScreen(
     val listState = rememberLazyListState()
 
     var showPrivacySheet by remember { mutableStateOf(false) }
+    var showSettingsSheet by remember { mutableStateOf(false) }
     var selectedFileForDetail by remember { mutableStateOf<FileItem?>(null) }
     val context = LocalContext.current
     var isListening by remember { mutableStateOf(false) }
@@ -263,6 +267,14 @@ fun ChatScreen(
                             tint = VaultOnSurfaceVariant
                         )
                     }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    IconButton(onClick = { showSettingsSheet = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Engine Settings",
+                            tint = VaultOnSurfaceVariant
+                        )
+                    }
                     Spacer(modifier = Modifier.width(6.dp))
                     Box(
                         modifier = Modifier
@@ -411,7 +423,8 @@ fun ChatScreen(
                                 VaultChatMessageItem(
                                     message = message,
                                     onFileClick = { file -> selectedFileForDetail = file },
-                                    onActionProposalClick = { proposal -> viewModel.onConfirmAction(proposal) }
+                                    onActionProposalClick = { proposal -> viewModel.onConfirmAction(proposal) },
+                                    onDeleteFile = { file -> viewModel.requestDeleteFile(file) }
                                 )
                             }
 
@@ -581,6 +594,16 @@ fun ChatScreen(
         PrivacySheet(onDismiss = { showPrivacySheet = false })
     }
 
+    // Engine & Settings Sheet
+    if (showSettingsSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSettingsSheet = false },
+            containerColor = VaultBackground
+        ) {
+            SettingsScreen()
+        }
+    }
+
     // File Detail Inspection Bottom Sheet
     selectedFileForDetail?.let { file ->
         FileDetailSheet(
@@ -598,8 +621,10 @@ fun ChatScreen(
 fun VaultChatMessageItem(
     message: ChatMessage,
     onFileClick: (FileItem) -> Unit,
-    onActionProposalClick: (ActionProposal) -> Unit
+    onActionProposalClick: (ActionProposal) -> Unit,
+    onDeleteFile: ((FileItem) -> Unit)? = null
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val isUser = message.sender == MessageSender.USER
 
     Column(
@@ -715,7 +740,9 @@ fun VaultChatMessageItem(
                                 message.searchResults.forEach { res ->
                                     FileResultCard(
                                         result = res,
-                                        onClick = { onFileClick(res.file) }
+                                        onClick = { onFileClick(res.file) },
+                                        onOpen = { com.storagesense.app.ui.util.FileActionHelper.openFile(context, it) },
+                                        onDelete = onDeleteFile
                                     )
                                 }
                             }

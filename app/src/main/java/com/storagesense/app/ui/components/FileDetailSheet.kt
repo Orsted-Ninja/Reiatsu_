@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -224,18 +225,19 @@ fun FileDetailSheet(
             // Primary Action Buttons Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
                     onClick = {
                         openFileExternally(context, file)
                     },
                     modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Open")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Open", maxLines = 1, softWrap = false)
                 }
 
                 FilledTonalButton(
@@ -243,11 +245,12 @@ fun FileDetailSheet(
                         shareFileExternally(context, file)
                     },
                     modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Share")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Share", maxLines = 1, softWrap = false)
                 }
 
                 OutlinedButton(
@@ -256,6 +259,7 @@ fun FileDetailSheet(
                         onDismiss()
                     },
                     modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         contentColor = DangerRed
@@ -263,7 +267,7 @@ fun FileDetailSheet(
                 ) {
                     Icon(imageVector = Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Trash")
+                    Text("Trash", maxLines = 1, softWrap = false)
                 }
             }
 
@@ -357,26 +361,7 @@ private fun DetailRow(
 }
 
 private fun openFileExternally(context: Context, file: FileItem) {
-    try {
-        val target = File(file.path)
-        if (!target.exists()) {
-            Toast.makeText(context, "File does not exist on disk", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val uri = try {
-            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", target)
-        } catch (e: Exception) {
-            Uri.fromFile(target)
-        }
-        val mime = getMimeType(file.extension)
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, mime)
-            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        context.startActivity(Intent.createChooser(intent, "Open with"))
-    } catch (e: Exception) {
-        Toast.makeText(context, "No app available to open this file", Toast.LENGTH_SHORT).show()
-    }
+    com.storagesense.app.ui.util.FileActionHelper.openFile(context, file)
 }
 
 private fun shareFileExternally(context: Context, file: FileItem) {

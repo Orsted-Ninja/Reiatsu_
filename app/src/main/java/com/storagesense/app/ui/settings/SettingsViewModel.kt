@@ -3,6 +3,8 @@ package com.storagesense.app.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.storagesense.app.action.SafeFileOps
+import com.storagesense.app.ai.embedding.TextEmbeddingModel
+import com.storagesense.app.ai.llm.OnDeviceLlmEngine
 import com.storagesense.app.domain.repository.FileRepository
 import com.storagesense.app.indexing.IndexProgress
 import com.storagesense.app.indexing.StorageIndexManager
@@ -13,14 +15,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-import com.storagesense.app.ai.embedding.TextEmbeddingModel
-
 data class SettingsUiState(
     val trashCount: Int = 0,
     val trashSizeFormatted: String = "0 B",
     val totalFilesIndexed: Int = 0,
     val indexProgress: IndexProgress = IndexProgress(),
     val isNeuralModelActive: Boolean = false,
+    val onDeviceLlmName: String? = null,
+    val isOnDeviceLlmReady: Boolean = false,
+    val llmModelStatus: String = "Awaiting Model",
     val actionMessage: String? = null
 )
 
@@ -29,7 +32,8 @@ class SettingsViewModel @Inject constructor(
     private val safeFileOps: SafeFileOps,
     private val storageIndexManager: StorageIndexManager,
     private val fileRepository: FileRepository,
-    private val textEmbeddingModel: TextEmbeddingModel
+    private val textEmbeddingModel: TextEmbeddingModel,
+    private val onDeviceLlmEngine: OnDeviceLlmEngine
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -39,8 +43,13 @@ class SettingsViewModel @Inject constructor(
         refreshStats()
         viewModelScope.launch {
             textEmbeddingModel.loadModel()
+            val isReady = onDeviceLlmEngine.isModelAvailable()
+            val name = onDeviceLlmEngine.getDetectedModelName()
             _uiState.value = _uiState.value.copy(
-                isNeuralModelActive = textEmbeddingModel.isNeuralOnnxActive
+                isNeuralModelActive = textEmbeddingModel.isNeuralOnnxActive,
+                isOnDeviceLlmReady = isReady,
+                onDeviceLlmName = name,
+                llmModelStatus = if (isReady) "Active: $name" else "Ready (Listening to /sdcard/StorageSense/models)"
             )
         }
         viewModelScope.launch {
@@ -57,10 +66,15 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val (count, bytes) = safeFileOps.getTrashStats()
             val totalFiles = fileRepository.getTotalIndexedCount()
+            val modelName = onDeviceLlmEngine.getDetectedModelName()
+            val isModelReady = onDeviceLlmEngine.isModelAvailable()
             _uiState.value = _uiState.value.copy(
                 trashCount = count,
                 trashSizeFormatted = formatBytes(bytes),
-                totalFilesIndexed = totalFiles
+                totalFilesIndexed = totalFiles,
+                onDeviceLlmName = modelName,
+                isOnDeviceLlmReady = isModelReady,
+                llmModelStatus = if (isModelReady) "Active: $modelName" else "Ready (Listening to /sdcard/StorageSense/models)"
             )
         }
     }

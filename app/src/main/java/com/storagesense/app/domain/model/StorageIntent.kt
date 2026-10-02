@@ -73,6 +73,20 @@ sealed interface StorageIntent {
         val folderKeyword: String? = null,
         val label: String
     ) : StorageIntent
+
+    /**
+     * Undo last destructive file action
+     */
+    data class Undo(
+        val query: String? = null
+    ) : StorageIntent
+
+    /**
+     * Informational help explaining features (e.g. how to undo)
+     */
+    data class Help(
+        val topic: String
+    ) : StorageIntent
 }
 
 enum class KeepStrategy {
