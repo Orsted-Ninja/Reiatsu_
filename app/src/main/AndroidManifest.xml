@@ -16,6 +16,7 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Background indexing service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

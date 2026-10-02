@@ -1,9 +1,20 @@
 package com.storagesense.app.ui.chat
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,15 +36,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.FolderZip
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.QuestionMark
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,6 +67,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -63,12 +76,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.storagesense.app.domain.model.ActionProposal
 import com.storagesense.app.domain.model.FileItem
 import com.storagesense.app.ui.components.FileDetailSheet
 import com.storagesense.app.ui.components.PrivacySheet
 import com.storagesense.app.ui.components.VaultEmblem
-import com.storagesense.app.ui.components.VoiceQueryDialog
 import com.storagesense.app.ui.theme.AmbientGiltGlow
 import com.storagesense.app.ui.theme.VaultBackground
 import com.storagesense.app.ui.theme.VaultOnPrimary
@@ -93,8 +106,103 @@ fun ChatScreen(
     val listState = rememberLazyListState()
 
     var showPrivacySheet by remember { mutableStateOf(false) }
-    var showVoiceDialog by remember { mutableStateOf(false) }
     var selectedFileForDetail by remember { mutableStateOf<FileItem?>(null) }
+    val context = LocalContext.current
+    var isListening by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(context, "Microphone permission required for speech recognition", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val speechRecognizer = remember {
+        if (SpeechRecognizer.isRecognitionAvailable(context)) {
+            SpeechRecognizer.createSpeechRecognizer(context)
+        } else null
+    }
+
+    DisposableEffect(speechRecognizer) {
+        val listener = object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {
+                isListening = false
+            }
+            override fun onError(error: Int) {
+                isListening = false
+            }
+            override fun onResults(results: Bundle?) {
+                isListening = false
+                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                if (!matches.isNullOrEmpty()) {
+                    val spoken = matches[0].trim()
+                    if (spoken.isNotEmpty()) {
+                        inputText = if (inputText.isBlank()) spoken else "$inputText $spoken"
+                    }
+                }
+            }
+            override fun onPartialResults(partialResults: Bundle?) {
+                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                if (!matches.isNullOrEmpty()) {
+                    val partial = matches[0].trim()
+                    if (partial.isNotEmpty()) {
+                        inputText = partial
+                    }
+                }
+            }
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        }
+        speechRecognizer?.setRecognitionListener(listener)
+
+        onDispose {
+            try {
+                speechRecognizer?.destroy()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun startListening() {
+        val hasAudio = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasAudio) {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
+
+        if (speechRecognizer == null) {
+            Toast.makeText(context, "Speech recognition not available on device", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        try {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            }
+            speechRecognizer.startListening(intent)
+            isListening = true
+        } catch (e: Exception) {
+            isListening = false
+        }
+    }
+
+    fun stopListening() {
+        if (isListening) {
+            try {
+                speechRecognizer?.stopListening()
+            } catch (_: Exception) {}
+            isListening = false
+        }
+    }
 
     LaunchedEffect(uiState.messages.size) {
         if (uiState.messages.isNotEmpty()) {
@@ -139,84 +247,37 @@ fun ChatScreen(
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
-                // Fixed Header Bar
-                Column(
+                // Fixed Header Bar (Minimal, without top branding, with ? info icon)
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(VaultBackground.copy(alpha = 0.85f))
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    IconButton(onClick = { viewModel.onUndo() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Undo,
+                            contentDescription = "Undo Last Action",
+                            tint = VaultOnSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(VaultPrimary)
+                            .clickable { showPrivacySheet = true },
+                        contentAlignment = Alignment.Center
                     ) {
-                        // Brand & Security Status
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = null,
-                                    tint = VaultPrimary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "StorageSense",
-                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = VaultPrimaryContainer
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(VaultPrimary)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                val usedGb = String.format("%.1f", uiState.usedBytes / (1024.0 * 1024.0 * 1024.0))
-                                val totalGb = String.format("%.0f", uiState.totalBytes / (1024.0 * 1024.0 * 1024.0))
-                                Text(
-                                    text = "$usedGb GB / $totalGb GB",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = VaultOutline
-                                )
-                                Text(text = " • ", style = MaterialTheme.typography.labelSmall, color = VaultOutlineVariant)
-                                Text(
-                                    text = "AIR-GAPPED",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = VaultPrimary.copy(alpha = 0.85f)
-                                )
-                            }
-                        }
-
-                        // Right: Undo button & Person/Node Indicator
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { viewModel.onUndo() }) {
-                                Icon(
-                                    imageVector = Icons.Default.Undo,
-                                    contentDescription = "Undo Last Action",
-                                    tint = VaultOnSurfaceVariant
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(VaultPrimary)
-                                    .clickable { showPrivacySheet = true },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = "Security Vault",
-                                    tint = VaultOnPrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
+                        Icon(
+                            imageVector = Icons.Default.QuestionMark,
+                            contentDescription = "Help & Information",
+                            tint = VaultOnPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
@@ -226,52 +287,6 @@ fun ChatScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                // Live Background Indexing Banner if running
-                if (uiState.indexProgress.isRunning) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(VaultSurfaceContainerLow)
-                            .border(1.dp, VaultOutlineVariant, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Indexing: ${uiState.indexProgress.currentFileName.take(24)}...",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = VaultPrimary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "${uiState.indexProgress.indexedCount}/${uiState.indexProgress.totalToIndex.coerceAtLeast(1)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = VaultPrimary
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(3.dp))
-                            val progressFloat = if (uiState.indexProgress.totalToIndex > 0) {
-                                (uiState.indexProgress.indexedCount.toFloat() / uiState.indexProgress.totalToIndex).coerceIn(0f, 1f)
-                            } else 0f
-                            LinearProgressIndicator(
-                                progress = { progressFloat },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(2.dp)
-                                    .clip(CircleShape),
-                                color = VaultPrimary,
-                                trackColor = VaultSurfaceContainer
-                            )
-                        }
-                    }
-                }
 
                 // Main Viewport
                 Box(
@@ -476,15 +491,30 @@ fun ChatScreen(
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Mic Button
-                        IconButton(
-                            onClick = { showVoiceDialog = true },
-                            modifier = Modifier.size(36.dp)
+                        // Tap and Hold Mic Button
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(if (isListening) VaultPrimary.copy(alpha = 0.25f) else Color.Transparent)
+                                .pointerInput(speechRecognizer) {
+                                    detectTapGestures(
+                                        onPress = {
+                                            startListening()
+                                            try {
+                                                awaitRelease()
+                                            } finally {
+                                                stopListening()
+                                            }
+                                        }
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Mic,
-                                contentDescription = "Voice Input",
-                                tint = VaultPrimary,
+                                contentDescription = "Hold to Speak",
+                                tint = if (isListening) VaultPrimary else VaultPrimary.copy(alpha = 0.8f),
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -502,9 +532,9 @@ fun ChatScreen(
                             decorationBox = { innerTextField ->
                                 if (inputText.isBlank()) {
                                     Text(
-                                        text = "Consult the vault assistant...",
+                                        text = if (isListening) "Listening... speak now" else "Consult the vault assistant...",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = VaultOutline
+                                        color = if (isListening) VaultPrimary else VaultOutline
                                     )
                                 }
                                 innerTextField()
@@ -549,14 +579,6 @@ fun ChatScreen(
     // Privacy Details Sheet
     if (showPrivacySheet) {
         PrivacySheet(onDismiss = { showPrivacySheet = false })
-    }
-
-    // Voice Query Listening Dialog
-    if (showVoiceDialog) {
-        VoiceQueryDialog(
-            onDismiss = { showVoiceDialog = false },
-            onSpeechResult = { text -> viewModel.onSendMessage(text) }
-        )
     }
 
     // File Detail Inspection Bottom Sheet
