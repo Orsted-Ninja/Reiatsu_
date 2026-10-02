@@ -18,8 +18,8 @@ class FileRepositoryImpl @Inject constructor(
         return dao.insertOrUpdate(FileMetadataEntity.fromDomain(file))
     }
 
-    override suspend fun insertAll(files: List<FileItem>) {
-        dao.insertAll(files.map { FileMetadataEntity.fromDomain(it) })
+    override suspend fun insertAll(files: List<FileItem>): List<Long> {
+        return dao.insertAll(files.map { FileMetadataEntity.fromDomain(it) })
     }
 
     override suspend fun getFileById(id: Long): FileItem? {

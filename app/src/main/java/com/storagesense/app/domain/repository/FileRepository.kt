@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 interface FileRepository {
     suspend fun insertOrUpdate(file: FileItem): Long
-    suspend fun insertAll(files: List<FileItem>)
+    suspend fun insertAll(files: List<FileItem>): List<Long>
     suspend fun getFileById(id: Long): FileItem?
     suspend fun getFileByPath(path: String): FileItem?
     suspend fun getAllFiles(): List<FileItem>

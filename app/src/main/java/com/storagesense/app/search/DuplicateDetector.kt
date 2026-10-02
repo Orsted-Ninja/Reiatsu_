@@ -26,7 +26,7 @@ class DuplicateDetector @Inject constructor(
     }
 
     suspend fun findExactDuplicates(): List<DuplicateGroup> {
-        val filesWithHashes = fileMetadataDao.getAllWithHashes().map { it.toDomain() }
+        val filesWithHashes = fileMetadataDao.getDuplicateCandidates().map { it.toDomain() }
         val grouped = filesWithHashes.groupBy { it.sha256Hash ?: "" }.filter { it.key.isNotEmpty() && it.value.size > 1 }
 
         val duplicateGroups = mutableListOf<DuplicateGroup>()

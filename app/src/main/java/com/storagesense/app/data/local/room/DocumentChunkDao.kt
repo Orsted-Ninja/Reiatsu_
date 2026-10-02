@@ -17,7 +17,7 @@ interface DocumentChunkDao {
     @Query("SELECT * FROM document_chunks WHERE fileId = :fileId ORDER BY chunkIndex ASC")
     suspend fun getChunksForFile(fileId: Long): List<DocumentChunkEntity>
 
-    @Query("SELECT * FROM document_chunks WHERE embedding IS NOT NULL")
+    @Query("SELECT * FROM document_chunks WHERE embedding IS NOT NULL LIMIT 500")
     suspend fun getAllChunksWithEmbeddings(): List<DocumentChunkEntity>
 
     @Query("DELETE FROM document_chunks WHERE fileId = :fileId")

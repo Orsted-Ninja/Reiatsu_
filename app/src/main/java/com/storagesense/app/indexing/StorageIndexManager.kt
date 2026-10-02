@@ -77,10 +77,11 @@ class StorageIndexManager @Inject constructor(
                 // Batch insert into database
                 val batchSize = 100
                 for (chunk in scannedItems.chunked(batchSize)) {
-                    fileRepository.insertAll(chunk)
-                    for (item in chunk) {
+                    val insertedIds = fileRepository.insertAll(chunk)
+                    for ((index, item) in chunk.withIndex()) {
+                        val fileId = insertedIds.getOrNull(index) ?: item.id
                         searchDao.indexDocumentText(
-                            fileId = item.id,
+                            fileId = fileId,
                             filename = item.name,
                             textChunks = listOf(item.name)
                         )

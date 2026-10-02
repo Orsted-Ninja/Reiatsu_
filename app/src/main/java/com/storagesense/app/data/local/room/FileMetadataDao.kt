@@ -14,7 +14,7 @@ interface FileMetadataDao {
     suspend fun insertOrUpdate(file: FileMetadataEntity): Long
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(files: List<FileMetadataEntity>)
+    suspend fun insertAll(files: List<FileMetadataEntity>): List<Long>
 
     @Query("SELECT * FROM file_metadata WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): FileMetadataEntity?
@@ -22,10 +22,10 @@ interface FileMetadataDao {
     @Query("SELECT * FROM file_metadata WHERE path = :path LIMIT 1")
     suspend fun getByPath(path: String): FileMetadataEntity?
 
-    @Query("SELECT * FROM file_metadata ORDER BY lastModifiedEpochMs DESC")
+    @Query("SELECT * FROM file_metadata ORDER BY lastModifiedEpochMs DESC LIMIT 500")
     suspend fun getAll(): List<FileMetadataEntity>
 
-    @Query("SELECT * FROM file_metadata ORDER BY lastModifiedEpochMs DESC")
+    @Query("SELECT * FROM file_metadata ORDER BY lastModifiedEpochMs DESC LIMIT 500")
     fun observeAll(): Flow<List<FileMetadataEntity>>
 
     @Query("SELECT * FROM file_metadata WHERE sha256Hash = :hash")
@@ -34,7 +34,10 @@ interface FileMetadataDao {
     @Query("SELECT * FROM file_metadata WHERE sha256Hash IS NOT NULL AND sha256Hash != ''")
     suspend fun getAllWithHashes(): List<FileMetadataEntity>
 
-    @Query("SELECT * FROM file_metadata WHERE category = :category ORDER BY sizeBytes DESC")
+    @Query("SELECT * FROM file_metadata WHERE sha256Hash IN (SELECT sha256Hash FROM file_metadata WHERE sha256Hash IS NOT NULL AND sha256Hash != '' GROUP BY sha256Hash HAVING COUNT(*) > 1) ORDER BY sizeBytes DESC")
+    suspend fun getDuplicateCandidates(): List<FileMetadataEntity>
+
+    @Query("SELECT * FROM file_metadata WHERE category = :category ORDER BY lastModifiedEpochMs DESC LIMIT 300")
     suspend fun getByCategory(category: String): List<FileMetadataEntity>
 
     @Query("SELECT COUNT(*) FROM file_metadata")
