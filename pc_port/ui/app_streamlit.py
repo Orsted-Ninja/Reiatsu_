@@ -451,17 +451,58 @@ with tab_dedup:
     st.header("Intelligent 3-Tier Deduplication Studio")
     st.caption("Identifies byte-level exact duplicates, document near-duplicate revisions via centroid vector similarity, and perceptual image duplicates.")
 
-    if st.button("🔎 Run Complete Duplicate Analysis", type="primary"):
-        with st.spinner("Computing hash buckets, Chroma document centroids, and image pHash distances..."):
-            groups = coord.dedup_detector.find_all_duplicates()
-            st.session_state["dup_groups"] = groups
+    with coord.db.get_connection() as conn:
+        reg_count = conn.execute("SELECT count(*) as cnt FROM file_registry").fetchone()["cnt"]
+
+    if reg_count == 0:
+        st.warning("⚠️ **Your file registry is currently empty (0 indexed files).** Deduplication compares registered files to find exact, semantic, and image duplicates.")
+
+    with st.expander("📁 Target Folder to Scan & Deduplicate (Optional)", expanded=(reg_count == 0)):
+        col_scan_path, col_scan_btn = st.columns([3, 1])
+        with col_scan_path:
+            std_folders = get_standard_user_folders()
+            default_fld = std_folders.get("Downloads (C:)", str(Path.home() / "Downloads"))
+            scan_target = st.text_input("Folder path:", value=default_fld, help="Enter a folder to index and analyze for duplicates")
+        with col_scan_btn:
+            st.write("")
+            st.write("")
+            if st.button("⚡ Scan & Deduplicate", type="primary", use_container_width=True):
+                with st.spinner(f"Indexing files from {scan_target} and analyzing duplicate clusters..."):
+                    groups = coord.dedup_detector.find_all_duplicates(folder=scan_target)
+                    st.session_state["dup_groups"] = groups
+                    st.rerun()
+
+    col_btn1, col_btn2 = st.columns([2, 1])
+    with col_btn1:
+        if st.button("🔎 Run Duplicate Analysis (All Indexed Files)", type="secondary"):
+            with st.spinner("Computing hash buckets, document centroids, and image pHash distances..."):
+                groups = coord.dedup_detector.find_all_duplicates()
+                st.session_state["dup_groups"] = groups
+                st.rerun()
 
     groups = st.session_state.get("dup_groups", [])
     if not groups:
-        st.info("No duplicates detected. Click 'Run Complete Duplicate Analysis' above.")
+        if reg_count > 0:
+            st.info("No duplicates detected among indexed files. Click 'Run Duplicate Analysis' or specify a folder above to scan new files.")
     else:
         total_reclaim = sum(g.reclaimable_bytes for g in groups)
-        st.success(f"Detected **{len(groups)}** duplicate clusters. Potential space reclaimable: **{format_bytes(total_reclaim)}**")
+        all_del_candidates = [c for g in groups for c in g.candidates_to_delete]
+        
+        st.success(f"Detected **{len(groups)}** duplicate clusters. Potential space reclaimable: **{format_bytes(total_reclaim)}** across {len(all_del_candidates)} candidate copies.")
+
+        if st.button(f"🗑️ Quarantine ALL Older Copies ({len(all_del_candidates)} files, Free {format_bytes(total_reclaim)})", type="primary"):
+            prop = coord.action_engine.create_proposal(
+                action_type="DEDUPLICATE",
+                description=f"Quarantine all {len(all_del_candidates)} duplicate copies",
+                target_files=all_del_candidates
+            )
+            res = coord.action_engine.execute_proposal(prop)
+            if res.get("errors"):
+                for err in res["errors"]:
+                    st.error(f"⚠️ {err}")
+            st.success(f"Quarantined {res['success_count']} files to safe trash! Freed {format_bytes(res['freed_bytes'])}")
+            st.session_state["dup_groups"] = []
+            st.rerun()
 
         for idx, g in enumerate(groups):
             render_duplicate_card(g, idx)
@@ -476,6 +517,7 @@ with tab_dedup:
                     for err in res["errors"]:
                         st.error(f"⚠️ {err}")
                 st.success(f"Quarantined {res['success_count']} files to safe trash! Freed {format_bytes(res['freed_bytes'])}")
+                st.session_state["dup_groups"] = [grp for grp in groups if grp.group_id != g.group_id]
                 st.rerun()
 
 # ----------------- TAB 3: SPACE RECLAIMER -----------------

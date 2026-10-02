@@ -18,11 +18,17 @@ cd /d "%~dp0"
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 
-where py >nul 2>nul
-if %ERRORLEVEL% EQU 0 (
-    set "PY_CMD=py"
+if exist "%~dp0..\.venv\Scripts\python.exe" (
+    set "PY_CMD=%~dp0..\.venv\Scripts\python.exe"
+) else if exist "%~dp0.venv\Scripts\python.exe" (
+    set "PY_CMD=%~dp0.venv\Scripts\python.exe"
 ) else (
-    set "PY_CMD=python"
+    where py >nul 2>nul
+    if %ERRORLEVEL% EQU 0 (
+        set "PY_CMD=py"
+    ) else (
+        set "PY_CMD=python"
+    )
 )
 
 %PY_CMD% run_app.py

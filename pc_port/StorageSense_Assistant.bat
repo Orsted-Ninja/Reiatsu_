@@ -1,6 +1,19 @@
 @echo off
 title StorageSense Assistant - 1-Click Menu
 chcp 65001 >nul
+if exist "%~dp0..\.venv\Scripts\python.exe" (
+    set "PY_CMD=%~dp0..\.venv\Scripts\python.exe"
+) else if exist "%~dp0.venv\Scripts\python.exe" (
+    set "PY_CMD=%~dp0.venv\Scripts\python.exe"
+) else (
+    where py >nul 2>nul
+    if %ERRORLEVEL% EQU 0 (
+        set "PY_CMD=py"
+    ) else (
+        set "PY_CMD=python"
+    )
+)
+
 :menu
 cls
 echo ============================================================
@@ -22,24 +35,24 @@ if "%choice%"=="1" (
     echo.
     echo Launching Desktop Dashboard...
     cd /d "%~dp0"
-    start python run_app.py
+    start "" "%PY_CMD%" run_app.py
     pause
     goto menu
 )
 if "%choice%"=="2" (
     echo.
     cd /d "%~dp0"
-    python run_cli.py --telemetry
+    "%PY_CMD%" run_cli.py --telemetry
     echo.
     pause
     goto menu
 )
 if "%choice%"=="3" (
     echo.
-    set /p folder="Enter folder path to scan (or press Enter for F:\ASCENT\idea): "
-    if "%folder%"=="" set folder=F:\ASCENT\idea
+    set /p folder="Enter folder path to scan (or press Enter for current directory): "
+    if "%folder%"=="" set "folder=%~dp0.."
     cd /d "%~dp0"
-    python run_cli.py --scan "%folder%"
+    "%PY_CMD%" run_cli.py --scan "%folder%"
     echo.
     pause
     goto menu
@@ -48,15 +61,20 @@ if "%choice%"=="4" (
     echo.
     set /p query="Enter your search query: "
     cd /d "%~dp0"
-    python run_cli.py --search "%query%"
+    "%PY_CMD%" run_cli.py --search "%query%"
     echo.
     pause
     goto menu
 )
 if "%choice%"=="5" (
     echo.
+    set /p folder="Enter folder to deduplicate (or press Enter to scan all indexed files): "
     cd /d "%~dp0"
-    python run_cli.py --dedup
+    if not "%folder%"=="" (
+        "%PY_CMD%" run_cli.py --dedup "%folder%"
+    ) else (
+        "%PY_CMD%" run_cli.py --dedup
+    )
     echo.
     pause
     goto menu
@@ -66,7 +84,7 @@ if "%choice%"=="6" (
     set /p size_gb="Enter target GB to free (e.g. 0.001 or 1.0): "
     if "%size_gb%"=="" set size_gb=0.001
     cd /d "%~dp0"
-    python run_cli.py --clean %size_gb%
+    "%PY_CMD%" run_cli.py --clean %size_gb%
     echo.
     pause
     goto menu

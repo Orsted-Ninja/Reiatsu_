@@ -66,5 +66,58 @@ class TestSemanticDeduplication(unittest.TestCase):
         self.assertIn("DBMS_Assignment_Final_Submitted.txt", file_names)
         self.assertNotIn("Chocolate_Cake_Recipe.txt", file_names)
 
+    def test_exact_duplicates_with_protection(self):
+        # Create exact duplicate files
+        content = "CONFIDENTIAL TAX RETURN 2024 - INCOME AND EXPENSE DISCLOSURE"
+        f_prot = self.temp_dir / "official_tax_return.txt"
+        f_prot.write_text(content, encoding="utf-8")
+
+        f_copy = self.temp_dir / "temp_copy_backup.txt"
+        f_copy.write_text(content, encoding="utf-8")
+
+        self.search_engine.index_file(f_prot)
+        self.search_engine.index_file(f_copy)
+
+        exact_groups = self.detector.find_exact_duplicates()
+        self.assertEqual(len(exact_groups), 1)
+
+        g = exact_groups[0]
+        self.assertEqual(g.match_type, "EXACT_HASH")
+        self.assertEqual(g.confidence, 1.0)
+        # Verify protected document (tax keyword) is selected as KEEP
+        self.assertEqual(Path(g.recommended_keep_path).name, "official_tax_return.txt")
+        self.assertIn(str(f_copy.resolve()), [str(Path(p).resolve()) for p in g.candidates_to_delete])
+
+    def test_image_duplicates(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("PIL not installed")
+
+        img1_path = self.temp_dir / "photo_original.png"
+        img2_path = self.temp_dir / "photo_resized_copy.png"
+
+        img1 = Image.new("RGB", (100, 100), color=(120, 200, 50))
+        img1.save(str(img1_path))
+
+        img2 = Image.new("RGB", (100, 100), color=(120, 200, 52))  # Near-identical color
+        img2.save(str(img2_path))
+
+        self.search_engine.index_file(img1_path)
+        self.search_engine.index_file(img2_path)
+
+        img_groups = self.detector.find_image_duplicates(max_hamming_distance=6)
+        self.assertTrue(len(img_groups) >= 1)
+        self.assertEqual(img_groups[0].match_type, "PERCEPTUAL_IMAGE")
+
+    def test_scan_folder_for_dedup(self):
+        scan_folder = self.temp_dir / "subfolder_to_scan"
+        scan_folder.mkdir(parents=True, exist_ok=True)
+        (scan_folder / "file_a.txt").write_text("Hello from file A in subfolder", encoding="utf-8")
+        (scan_folder / "file_b.txt").write_text("Hello from file B in subfolder", encoding="utf-8")
+
+        count = self.detector.scan_folder_for_dedup(scan_folder)
+        self.assertEqual(count, 2)
+
 if __name__ == "__main__":
     unittest.main()

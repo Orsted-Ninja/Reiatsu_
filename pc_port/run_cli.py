@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--allow-chunk", action="store_true", help="Allow automatic chunking of discovered unindexed files")
     parser.add_argument("--chunk", type=str, help="Chunk and index a specific file on-demand")
     parser.add_argument("--unchunk", type=str, help="Unchunk and remove a file from index")
-    parser.add_argument("--dedup", action="store_true", help="Scan for duplicate files (exact, semantic, and image)")
+    parser.add_argument("--dedup", nargs="?", const=True, default=False, help="Scan for duplicate files (exact, semantic, and image). Optionally specify a folder to scan & dedup.")
     parser.add_argument("--clean", type=float, help="Recommend files to delete to free X GB")
     parser.add_argument("--yes", "-y", action="store_true", help="Automatically confirm safe trash movement for clean and dedup")
     parser.add_argument("--trash-list", action="store_true", help="List all quarantined files in trash")
@@ -193,6 +193,23 @@ def main():
         print()
 
     elif args.dedup:
+        target_folder = args.dedup if isinstance(args.dedup, str) and args.dedup is not True else None
+        
+        with coord.db.get_connection() as conn:
+            reg_cnt = conn.execute("SELECT count(*) as cnt FROM file_registry").fetchone()["cnt"]
+
+        if target_folder:
+            print(f"\nScanning & indexing folder for duplicates: {target_folder} ...")
+            scanned = dedup.scan_folder_for_dedup(target_folder)
+            print(f"Indexed {scanned} files from {target_folder}.")
+        elif reg_cnt == 0:
+            print("\n[Notice] File registry is currently empty (0 files indexed).")
+            print("Tip: Provide a folder to scan for duplicates, e.g.:")
+            print("     py run_cli.py --dedup C:\\Users\\ASUS\\Downloads")
+            print("Scanning project folder to detect potential duplicates...")
+            scanned = dedup.scan_folder_for_dedup(BASE_DIR.parent)
+            print(f"Indexed {scanned} files.")
+
         print("\nScanning for duplicate clusters (exact hashes, semantic centroids, and perceptual images)...")
         groups = dedup.find_all_duplicates()
         if not groups:
@@ -470,7 +487,48 @@ def interactive_cli(coord):
                     print(f"[SUCCESS] Restored {res['file_name']} to {res['path']}")
                 else:
                     print(f"[ERROR] Failed to restore entry {entry_id}: {res.get('message')}")
-        elif cmd_lower == "dedup":
+        elif cmd_lower.startswith("dedup"):
+            parts = line.split(maxsplit=1)
+            folder_arg = parts[1].strip().strip('"\'') if len(parts) > 1 else ""
+            presets = get_standard_user_folders()
+
+            target_fld = None
+            if folder_arg:
+                if folder_arg.lower() in ["downloads", "dl"]:
+                    target_fld = presets.get("Downloads (C:)")
+                elif folder_arg.lower() in ["documents", "docs", "doc"]:
+                    target_fld = presets.get("Documents (C:)")
+                elif folder_arg.lower() in ["desktop"]:
+                    target_fld = presets.get("Desktop (C:)")
+                elif folder_arg.lower() in ["pictures", "pics"]:
+                    target_fld = presets.get("Pictures (C:)")
+                else:
+                    cand = Path(folder_arg).resolve()
+                    if cand.exists() and cand.is_dir():
+                        target_fld = str(cand)
+                    else:
+                        print(f"Directory not found: {folder_arg}")
+
+            with coord.db.get_connection() as conn:
+                reg_cnt = conn.execute("SELECT count(*) as cnt FROM file_registry").fetchone()["cnt"]
+
+            if target_fld:
+                print(f"\nIndexing folder for duplicates: {target_fld} ...")
+                scanned = coord.dedup_detector.scan_folder_for_dedup(target_fld)
+                print(f"Indexed {scanned} files from {target_fld}.")
+            elif reg_cnt == 0:
+                print("\n[Notice] No files have been indexed yet in the database registry.")
+                try:
+                    chosen = input("Enter a folder path to scan for duplicates (or press Enter for Downloads): ").strip().strip('"\'')
+                    if not chosen:
+                        chosen = presets.get("Downloads (C:)")
+                    if chosen and Path(chosen).exists():
+                        print(f"Indexing {chosen} ...")
+                        scanned = coord.dedup_detector.scan_folder_for_dedup(chosen)
+                        print(f"Indexed {scanned} files.")
+                except (EOFError, KeyboardInterrupt):
+                    pass
+
             print("\nScanning for duplicate clusters...")
             groups = coord.dedup_detector.find_all_duplicates()
             if not groups:

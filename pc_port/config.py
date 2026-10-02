@@ -51,7 +51,7 @@ OLLAMA_BASE_URL = detect_ollama_endpoint()
 
 # Model defaults (dynamically refreshed by LLMAgent upon connection)
 DEFAULT_MODEL = "auto"
-FALLBACK_MODEL = "gemma2:2b"
+FALLBACK_MODEL = "gemma4:e4b"
 
 # Memory Optimization for 8 GB RAM / Dual-core Core i3
 OLLAMA_NUM_CTX = 2048

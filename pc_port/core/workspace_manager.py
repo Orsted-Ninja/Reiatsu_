@@ -8,8 +8,13 @@ from core.logger import setup_logger
 
 logger = setup_logger("WorkspaceManager")
 
-# Default fallback workspace directory (preserving exact current PC path)
-DEFAULT_WORKSPACE_DIR = Path("F:/ASCENT/idea/pc_port").resolve()
+# Default fallback workspace directory (preserving F: if available, otherwise current pc_port dir)
+_pc_port_dir = Path(__file__).resolve().parent.parent
+_f_drive_dir = Path("F:/ASCENT/idea/pc_port")
+if _f_drive_dir.anchor and Path(_f_drive_dir.anchor).exists():
+    DEFAULT_WORKSPACE_DIR = _f_drive_dir.resolve()
+else:
+    DEFAULT_WORKSPACE_DIR = _pc_port_dir
 
 # Configuration file location: user home ~/.storagesense/config.json
 USER_CONFIG_DIR = Path.home() / ".storagesense"

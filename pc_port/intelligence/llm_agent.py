@@ -105,7 +105,7 @@ class LLMAgent:
         ]
         active_pool = candidate_models if candidate_models else models
 
-        priority_keywords = ["llama", "gemma", "qwen", "mistral", "phi"]
+        priority_keywords = ["gemma4", "gemma", "qwen", "llama", "mistral", "phi"]
         for kw in priority_keywords:
             for m in active_pool:
                 if kw in m.lower():
@@ -291,22 +291,26 @@ class LLMAgent:
             "model": self.model,
             "prompt": prompt,
             "stream": True,
+            "think": False,
             "options": {
                 "num_ctx": self.num_ctx,
                 "temperature": 0.2,
-                "num_predict": 120
+                "num_predict": 250
             },
             "keep_alive": self.keep_alive
         }
 
         yielded_any = False
+        read_timeout = max(15.0, float(OLLAMA_TIMEOUT))
         try:
-            with requests.post(f"{self.base_url}/api/generate", json=payload, stream=True, timeout=(2.0, 5.0)) as response:
+            with requests.post(f"{self.base_url}/api/generate", json=payload, stream=True, timeout=(5.0, read_timeout)) as response:
                 if response.status_code == 200:
                     for line in response.iter_lines():
                         if line:
                             chunk = json.loads(line.decode("utf-8"))
                             token = chunk.get("response", "")
+                            if not token and chunk.get("thinking"):
+                                token = chunk.get("thinking", "")
                             if token:
                                 yielded_any = True
                                 yield token
