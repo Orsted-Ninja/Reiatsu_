@@ -20,7 +20,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AssistChip
@@ -63,7 +63,7 @@ import java.io.File
 fun FileResultCard(
     result: SearchResult,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit = {},
+    onClick: (() -> Unit)? = null,
     onOpen: ((FileItem) -> Unit)? = null,
     onDelete: ((FileItem) -> Unit)? = null
 ) {
@@ -99,11 +99,7 @@ fun FileResultCard(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
         ),
         onClick = {
-            if (onClick != {}) {
-                onClick()
-            } else {
-                handleOpen()
-            }
+            onClick?.invoke() ?: handleOpen()
         }
     ) {
         Column(
@@ -222,7 +218,7 @@ fun FileResultCard(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.height(32.dp)
                 ) {
-                    Icon(Icons.Default.OpenInNew, contentDescription = "Open", modifier = Modifier.size(14.dp))
+                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open", modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Open", fontSize = 12.sp)
                 }

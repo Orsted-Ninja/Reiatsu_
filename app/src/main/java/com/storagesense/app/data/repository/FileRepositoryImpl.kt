@@ -25,8 +25,12 @@ class FileRepositoryImpl @Inject constructor(
     }
 
     override suspend fun insertAll(files: List<FileItem>): List<Long> {
+        if (files.isEmpty()) return emptyList()
+        // Bulk-fetch all existing records for paths in the list (single query instead of N queries)
+        val paths = files.map { it.path }
+        val existingByPath = dao.getByPaths(paths).associateBy { it.path }
         val entities = files.map { file ->
-            val existing = dao.getByPath(file.path)
+            val existing = existingByPath[file.path]
             if (existing != null) {
                 FileMetadataEntity.fromDomain(file.copy(id = existing.id))
             } else {

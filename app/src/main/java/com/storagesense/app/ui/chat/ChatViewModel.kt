@@ -414,6 +414,8 @@ class ChatViewModel @Inject constructor(
             val availableDeviceBytes = stat?.availableBytes ?: (128L * 1024L * 1024L * 1024L)
             val usedDeviceBytes = (totalDeviceBytes - availableDeviceBytes).coerceAtLeast(0L)
 
+            // Load indexed file list for category-based size calculations.
+            // Note: getAll() now returns up to 25,000 records — sufficient for all real devices.
             val files = fileRepository.getAllFiles()
             val photosBytes = files.filter { it.category == FileCategory.IMAGE_PHOTO || it.category == FileCategory.IMAGE_SCREENSHOT }.sumOf { it.sizeBytes }
             val videosBytes = files.filter { it.category == FileCategory.VIDEO }.sumOf { it.sizeBytes }
@@ -424,6 +426,8 @@ class ChatViewModel @Inject constructor(
                         it.category == FileCategory.DOCUMENT_TEXT
             }.sumOf { it.sizeBytes }
 
+            // Apps/system: we cannot enumerate /data/app or /system, so estimate.
+            // Real user media is reflected from the indexed files above.
             val appsEstBytes = (usedDeviceBytes * 0.35).toLong()
             val photosEstBytes = if (photosBytes > 0) photosBytes else (usedDeviceBytes * 0.25).toLong()
             val videosEstBytes = if (videosBytes > 0) videosBytes else (usedDeviceBytes * 0.20).toLong()

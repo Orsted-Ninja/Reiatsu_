@@ -72,11 +72,6 @@ class DashboardViewModel @Inject constructor(
     init {
         loadStats()
         viewModelScope.launch {
-            fileRepository.observeAllFiles().collect { files ->
-                calculateStats(files)
-            }
-        }
-        viewModelScope.launch {
             storageIndexManager.progress.collect { prog ->
                 _uiState.value = _uiState.value.copy(isScanning = prog.isRunning)
                 if (!prog.isRunning) {

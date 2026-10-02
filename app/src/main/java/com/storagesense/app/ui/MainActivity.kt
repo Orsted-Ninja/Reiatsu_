@@ -99,10 +99,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var lastScanTriggerMs = 0L
+
     override fun onResume() {
         super.onResume()
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()) {
-            chatViewModel.triggerScan()
+        val now = System.currentTimeMillis()
+        // Only re-trigger scan if 5+ minutes have passed since last trigger.
+        // This prevents spurious rescans every time a bottom sheet or dialog is dismissed.
+        if ((now - lastScanTriggerMs) > 5L * 60L * 1000L) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()) {
+                chatViewModel.triggerScan()
+                lastScanTriggerMs = now
+            }
         }
     }
 

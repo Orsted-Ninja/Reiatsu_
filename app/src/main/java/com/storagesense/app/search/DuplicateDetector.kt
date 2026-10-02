@@ -41,25 +41,14 @@ class DuplicateDetector @Inject constructor(
         val duplicateGroups = mutableListOf<DuplicateGroup>()
 
         for ((_, candidateFiles) in sizeCandidateGroups) {
-            // Compute fast hash only on files that share the exact same byte length
+            // Use the hash already precomputed by the background indexer (FileScanner)
             val fastHashGroups = candidateFiles.groupBy { fileItem ->
-                val realFile = File(fileItem.path)
-                if (realFile.exists()) fileScanner.computeSha256(realFile) else fileItem.sha256Hash ?: ""
+                fileItem.sha256Hash ?: ""
             }.filter { it.key.isNotEmpty() && it.value.size > 1 }
 
-            for ((fastHash, sameHashFiles) in fastHashGroups) {
-                // For files larger than 10MB threshold, verify with full SHA-256 across entire file to guarantee 100% exact match
-                val fullHashGroups = sameHashFiles.groupBy { fileItem ->
-                    val realFile = File(fileItem.path)
-                    if (!realFile.exists()) {
-                        fileItem.sha256Hash ?: ""
-                    } else if (fileItem.sizeBytes > FileScanner.LARGE_FILE_THRESHOLD_BYTES) {
-                        fileScanner.computeFullSha256(realFile)
-                    } else {
-                        // For files <= 10 MB, fast hash is already computed from the complete file stream
-                        fastHash
-                    }
-                }.filter { it.key.isNotEmpty() && it.value.size > 1 }
+            for ((_, sameHashFiles) in fastHashGroups) {
+                // If they share the exact byte length and the indexer's exact hash, they are exact duplicates
+                val fullHashGroups = mapOf(sameHashFiles.first().sha256Hash!! to sameHashFiles)
 
                 for ((_, exactFiles) in fullHashGroups) {
                     val sorted = sortCandidatesByKeepPriority(exactFiles)

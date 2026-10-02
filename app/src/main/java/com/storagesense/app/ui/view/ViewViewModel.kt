@@ -208,12 +208,6 @@ class ViewViewModel @Inject constructor(
         loadData()
 
         viewModelScope.launch {
-            fileRepository.observeAllFiles().collect { files ->
-                processFiles(files)
-            }
-        }
-
-        viewModelScope.launch {
             storageIndexManager.progress.collect { prog ->
                 _uiState.value = _uiState.value.copy(isScanning = prog.isRunning)
                 if (!prog.isRunning) {
@@ -518,10 +512,13 @@ class ViewViewModel @Inject constructor(
         viewModelScope.launch {
             val proposal = actionEngine.proposeTrash(listOf(file), "Move ${file.name} to Trash")
             val result = actionEngine.executeAction(proposal)
-            _uiState.value = _uiState.value.copy(actionResultMessage = result.message)
-            loadData()
+            // Update drill-down list immediately (before async loadData overwrites state)
             val updated = _uiState.value.activeDrillDownFiles.filter { it.path != file.path }
-            _uiState.value = _uiState.value.copy(activeDrillDownFiles = updated)
+            _uiState.value = _uiState.value.copy(
+                actionResultMessage = result.message,
+                activeDrillDownFiles = updated
+            )
+            loadData()
         }
     }
 
@@ -714,14 +711,19 @@ class ViewViewModel @Inject constructor(
             )
         )
 
-        // 2. Date Memory Card: "21 December 2021" (Matching user screenshot center card!)
+        // 2. Date Memory Card: dynamically pulled from the oldest/featured item
         val olderItem = media.getOrNull(1) ?: media.firstOrNull()
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = (olderItem?.dateModifiedEpochMs ?: System.currentTimeMillis()) }
+        val day = cal.get(java.util.Calendar.DAY_OF_MONTH).toString()
+        val month = cal.getDisplayName(java.util.Calendar.MONTH, java.util.Calendar.LONG, java.util.Locale.getDefault()) ?: ""
+        val year = cal.get(java.util.Calendar.YEAR).toString()
+
         memories.add(
             SpotlightMemory(
-                id = "mem_date_highlight",
-                title = "21",
-                subtitle = "December",
-                yearOrDate = "2021",
+                id = "mem_date_highlight_${olderItem?.id ?: 0}",
+                title = day,
+                subtitle = month,
+                yearOrDate = year,
                 coverUri = olderItem?.contentUri,
                 coverPath = olderItem?.filePath,
                 isSimilarShots = false

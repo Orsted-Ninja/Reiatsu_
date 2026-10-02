@@ -22,10 +22,13 @@ interface FileMetadataDao {
     @Query("SELECT * FROM file_metadata WHERE path = :path LIMIT 1")
     suspend fun getByPath(path: String): FileMetadataEntity?
 
-    @Query("SELECT * FROM file_metadata ORDER BY lastModifiedEpochMs DESC LIMIT 500")
+    @Query("SELECT * FROM file_metadata WHERE path IN (:paths)")
+    suspend fun getByPaths(paths: List<String>): List<FileMetadataEntity>
+
+    @Query("SELECT * FROM file_metadata ORDER BY lastModifiedEpochMs DESC LIMIT 25000")
     suspend fun getAll(): List<FileMetadataEntity>
 
-    @Query("SELECT * FROM file_metadata ORDER BY lastModifiedEpochMs DESC LIMIT 500")
+    @Query("SELECT * FROM file_metadata ORDER BY lastModifiedEpochMs DESC LIMIT 25000")
     fun observeAll(): Flow<List<FileMetadataEntity>>
 
     @Query("SELECT * FROM file_metadata WHERE sha256Hash = :hash")
@@ -37,7 +40,7 @@ interface FileMetadataDao {
     @Query("SELECT * FROM file_metadata WHERE sha256Hash IN (SELECT sha256Hash FROM file_metadata WHERE sha256Hash IS NOT NULL AND sha256Hash != '' GROUP BY sha256Hash HAVING COUNT(*) > 1) ORDER BY sizeBytes DESC")
     suspend fun getDuplicateCandidates(): List<FileMetadataEntity>
 
-    @Query("SELECT * FROM file_metadata WHERE category = :category ORDER BY lastModifiedEpochMs DESC LIMIT 300")
+    @Query("SELECT * FROM file_metadata WHERE category = :category ORDER BY lastModifiedEpochMs DESC LIMIT 5000")
     suspend fun getByCategory(category: String): List<FileMetadataEntity>
 
     @Query("SELECT COUNT(*) FROM file_metadata")

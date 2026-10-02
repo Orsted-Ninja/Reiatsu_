@@ -116,6 +116,7 @@ import com.storagesense.app.ui.theme.VaultSurfaceContainerHigh
 import com.storagesense.app.ui.theme.VaultSurfaceContainerLow
 import com.storagesense.app.ui.util.FileActionHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -128,10 +129,11 @@ fun UniversalFileViewer(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val recentFilesHelper = remember(context) { com.storagesense.app.ui.util.RecentFilesHelper(context) }
 
     LaunchedEffect(file.path) {
         try {
-            com.storagesense.app.ui.util.RecentFilesHelper(context).recordOpened(file.path)
+            recentFilesHelper.recordOpened(file.path)
         } catch (_: Exception) {}
     }
 
@@ -325,17 +327,18 @@ private fun PdfViewerContent(file: FileItem) {
         var pfd: ParcelFileDescriptor? = null
         var renderer: PdfRenderer? = null
 
-        try {
+        val renderJob = try {
             if (realFile.exists()) {
                 pfd = ParcelFileDescriptor.open(realFile, ParcelFileDescriptor.MODE_READ_ONLY)
                 renderer = PdfRenderer(pfd)
                 pageCount = renderer.pageCount
 
                 val activeRenderer = renderer
+                // Launch rendering job; we keep a handle so we can cancel before disposing renderer
                 coroutineScope.launch(Dispatchers.IO) {
-                    // Pre-render the first 5 pages, others as needed
-                    val initialCount = renderer.pageCount.coerceAtMost(10)
+                    val initialCount = activeRenderer.pageCount.coerceAtMost(10)
                     for (i in 0 until initialCount) {
+                        if (!coroutineContext.isActive) break // respect cancellation
                         try {
                             synchronized(activeRenderer) {
                                 val page = activeRenderer.openPage(i)
@@ -346,21 +349,26 @@ private fun PdfViewerContent(file: FileItem) {
                                 page.close()
                                 renderedPages[i] = bitmap
                             }
-                        } catch (e: Exception) {
-                            // Handled safely
+                        } catch (_: Exception) {
+                            // Individual page render failure — skip it
                         }
                     }
                 }
             } else {
                 loadError = "PDF file not found on disk"
+                null
             }
         } catch (e: Exception) {
             loadError = "Failed to open PDF: ${e.localizedMessage}"
+            null
         }
 
         onDispose {
             try {
-                renderer?.close()
+                renderJob?.cancel() // Cancel rendering before closing renderer
+                synchronized(renderer ?: Any()) {
+                    renderer?.close()
+                }
                 pfd?.close()
                 renderedPages.values.forEach { if (!it.isRecycled) it.recycle() }
                 renderedPages.clear()

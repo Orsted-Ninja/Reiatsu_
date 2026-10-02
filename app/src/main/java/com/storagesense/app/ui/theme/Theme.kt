@@ -6,7 +6,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -49,8 +48,8 @@ fun StorageSenseTheme(
         SideEffect {
             val window = (view.context as? Activity)?.window
             if (window != null) {
-                window.statusBarColor = VaultBackground.toArgb()
-                window.navigationBarColor = VaultBackground.toArgb()
+                // Use WindowCompat insets controller only — avoid deprecated statusBarColor /
+                // navigationBarColor (deprecated in API 35). Edge-to-edge + scaffold bg handles colours.
                 val insetsController = WindowCompat.getInsetsController(window, view)
                 insetsController.isAppearanceLightStatusBars = false
                 insetsController.isAppearanceLightNavigationBars = false

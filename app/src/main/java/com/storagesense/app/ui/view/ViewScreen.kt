@@ -26,6 +26,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.ChevronRight
@@ -38,12 +40,10 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ButtonDefaults
@@ -132,6 +132,29 @@ fun ViewScreen(
         uiState.actionResultMessage?.let { msg ->
             snackbarHostState.showSnackbar(msg)
             viewModel.dismissActionToast()
+        }
+    }
+
+    val repositories = remember(uiState.collections) {
+        uiState.collections.map { collection ->
+            val icon = when (collection.type) {
+                CollectionType.DUPLICATES -> Icons.Default.Refresh
+                CollectionType.LARGE_FILES -> Icons.Default.Movie
+                CollectionType.RECENTLY_ADDED -> Icons.Default.Image
+                CollectionType.RECENTLY_OPENED -> Icons.Default.Description
+                CollectionType.OLD_FILES -> Icons.Default.Archive
+                CollectionType.RECENTLY_DELETED -> Icons.Default.Security
+                CollectionType.WHATSAPP_MEDIA -> Icons.AutoMirrored.Filled.Send
+                CollectionType.TELEGRAM_MEDIA -> Icons.AutoMirrored.Filled.Send
+            }
+            VaultRepoData(
+                title = collection.title,
+                subtitle = collection.subtitle,
+                icon = icon,
+                type = collection.type,
+                formattedSize = collection.formattedSize,
+                count = collection.count
+            )
         }
     }
 
@@ -299,27 +322,6 @@ fun ViewScreen(
                 }
 
                 // Active Vault Repositories (Cards)
-                val repositories = uiState.collections.map { collection ->
-                    val icon = when (collection.type) {
-                        CollectionType.DUPLICATES -> Icons.Default.Refresh
-                        CollectionType.LARGE_FILES -> Icons.Default.Movie
-                        CollectionType.RECENTLY_ADDED -> Icons.Default.Image
-                        CollectionType.RECENTLY_OPENED -> Icons.Default.Description
-                        CollectionType.OLD_FILES -> Icons.Default.Archive
-                        CollectionType.RECENTLY_DELETED -> Icons.Default.Security
-                        CollectionType.WHATSAPP_MEDIA -> Icons.Default.Send
-                        CollectionType.TELEGRAM_MEDIA -> Icons.Default.Send
-                    }
-                    VaultRepoData(
-                        title = collection.title,
-                        subtitle = collection.subtitle,
-                        icon = icon,
-                        type = collection.type,
-                        formattedSize = collection.formattedSize,
-                        count = collection.count
-                    )
-                }
-
                 items(repositories) { repo ->
                     val isSelected = activeRepositoryFilter == repo.type
                     VaultRepositoryCard(
@@ -714,7 +716,7 @@ fun DrillDownFileCard(
                         modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.OpenInNew,
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                             contentDescription = "Open",
                             tint = VaultPrimary,
                             modifier = Modifier.size(18.dp)
