@@ -55,6 +55,9 @@ class StorageIndexManager @Inject constructor(
 
         scope.launch {
             try {
+                // Cleanup any stale/orphan FTS virtual table records before starting scan
+                searchDao.cleanupOrphanFts()
+
                 // Tier 1: Fast filesystem discovery & metadata extraction
                 _progress.value = IndexProgress(
                     isRunning = true,
@@ -74,12 +77,22 @@ class StorageIndexManager @Inject constructor(
                     }
                 }
 
-                // Batch insert into database
+                // Batch insert into database and retain real database IDs
                 val batchSize = 100
+                val documentsToIndex = mutableListOf<FileItem>()
                 for (chunk in scannedItems.chunked(batchSize)) {
                     val insertedIds = fileRepository.insertAll(chunk)
                     for ((index, item) in chunk.withIndex()) {
                         val fileId = insertedIds.getOrNull(index) ?: item.id
+                        val itemWithId = if (item.id != fileId) item.copy(id = fileId) else item
+                        if (item.category in listOf(
+                                FileCategory.DOCUMENT_PDF,
+                                FileCategory.DOCUMENT_WORD,
+                                FileCategory.DOCUMENT_SLIDES,
+                                FileCategory.DOCUMENT_TEXT
+                            )) {
+                            documentsToIndex.add(itemWithId)
+                        }
                         searchDao.indexDocumentText(
                             fileId = fileId,
                             filename = item.name,
@@ -94,28 +107,36 @@ class StorageIndexManager @Inject constructor(
                 )
 
                 // Tier 2: Deep content indexing for documents (PDF, DOCX, PPTX, TXT)
-                val documents = scannedItems.filter {
-                    it.category in listOf(
-                        FileCategory.DOCUMENT_PDF,
-                        FileCategory.DOCUMENT_WORD,
-                        FileCategory.DOCUMENT_SLIDES,
-                        FileCategory.DOCUMENT_TEXT
-                    )
-                }
+                if (documentsToIndex.isNotEmpty()) {
+                    // Prioritize user documents (Download, Documents, important identity files, course notes)
+                    val prioritizedDocs = documentsToIndex.sortedByDescending { doc ->
+                        val pathLower = doc.path.lowercase()
+                        val nameLower = doc.name.lowercase()
+                        var priority = 0
+                        if (doc.isImportant || nameLower.contains("aadhar") || nameLower.contains("aadhaar") || nameLower.contains("pan") || nameLower.contains("resume") || nameLower.contains("passport")) {
+                            priority += 100
+                        }
+                        if (pathLower.contains("/download/") || pathLower.contains("/documents/")) {
+                            priority += 50
+                        }
+                        if (nameLower.contains("mod") || nameLower.contains("dl") || nameLower.contains("notes")) {
+                            priority += 30
+                        }
+                        priority
+                    }
 
-                if (documents.isNotEmpty()) {
                     _progress.value = _progress.value.copy(
                         phase = ScanPhase.INDEXING_DOCUMENTS,
-                        totalToIndex = documents.size,
+                        totalToIndex = prioritizedDocs.size,
                         indexedCount = 0,
-                        message = "Extracting text from ${documents.size} documents..."
+                        message = "Extracting text from ${prioritizedDocs.size} documents..."
                     )
 
-                    for ((idx, doc) in documents.withIndex()) {
+                    for ((idx, doc) in prioritizedDocs.withIndex()) {
                         _progress.value = _progress.value.copy(
                             indexedCount = idx + 1,
                             currentFileName = doc.name,
-                            message = "Indexing (${idx + 1}/${documents.size}): ${doc.name}"
+                            message = "Indexing (${idx + 1}/${prioritizedDocs.size}): ${doc.name}"
                         )
                         indexingPipeline.indexFile(doc)
                     }
@@ -125,8 +146,8 @@ class StorageIndexManager @Inject constructor(
                     isRunning = false,
                     phase = ScanPhase.COMPLETED,
                     discoveredFiles = scannedItems.size,
-                    indexedCount = documents.size,
-                    totalToIndex = documents.size,
+                    indexedCount = documentsToIndex.size,
+                    totalToIndex = documentsToIndex.size,
                     message = "Indexing complete! ${scannedItems.size} files ready."
                 )
             } catch (e: Exception) {

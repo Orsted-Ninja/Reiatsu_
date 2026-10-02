@@ -2,6 +2,7 @@ package com.storagesense.app.ui.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.storagesense.app.action.ActionEngine
 import com.storagesense.app.domain.model.FileCategory
 import com.storagesense.app.domain.model.FileItem
 import com.storagesense.app.domain.repository.FileRepository
@@ -39,7 +40,10 @@ data class DashboardUiState(
     val totalStorageBytes: Long = 0,
     val categories: List<CategoryStat> = emptyList(),
     val isScanning: Boolean = false,
-    val recentFiles: List<FileItem> = emptyList()
+    val recentFiles: List<FileItem> = emptyList(),
+    val activeCategoryTitle: String? = null,
+    val activeCategoryFiles: List<FileItem> = emptyList(),
+    val actionResultMessage: String? = null
 ) {
     val formattedTotalSize: String
         get() {
@@ -58,7 +62,8 @@ data class DashboardUiState(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val fileRepository: FileRepository,
-    private val storageIndexManager: StorageIndexManager
+    private val storageIndexManager: StorageIndexManager,
+    private val actionEngine: ActionEngine
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -118,5 +123,39 @@ class DashboardViewModel @Inject constructor(
 
     fun triggerScan() {
         storageIndexManager.startScan(force = true)
+    }
+
+    fun openCategory(category: FileCategory, title: String) {
+        viewModelScope.launch {
+            val allFiles = fileRepository.getFilesByCategory(category.name)
+            _uiState.value = _uiState.value.copy(
+                activeCategoryTitle = title,
+                activeCategoryFiles = allFiles.sortedByDescending { it.sizeBytes }
+            )
+        }
+    }
+
+    fun closeCategory() {
+        _uiState.value = _uiState.value.copy(
+            activeCategoryTitle = null,
+            activeCategoryFiles = emptyList()
+        )
+    }
+
+    fun deleteFile(file: FileItem) {
+        viewModelScope.launch {
+            val proposal = actionEngine.proposeTrash(listOf(file), "Move ${file.name} to Trash")
+            val result = actionEngine.executeAction(proposal)
+            val updated = _uiState.value.activeCategoryFiles.filter { it.path != file.path }
+            _uiState.value = _uiState.value.copy(
+                actionResultMessage = result.message,
+                activeCategoryFiles = updated
+            )
+            loadStats()
+        }
+    }
+
+    fun dismissActionResult() {
+        _uiState.value = _uiState.value.copy(actionResultMessage = null)
     }
 }

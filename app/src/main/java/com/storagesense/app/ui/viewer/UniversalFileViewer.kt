@@ -129,6 +129,12 @@ fun UniversalFileViewer(
 ) {
     val context = LocalContext.current
 
+    LaunchedEffect(file.path) {
+        try {
+            com.storagesense.app.ui.util.RecentFilesHelper(context).recordOpened(file.path)
+        } catch (_: Exception) {}
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(

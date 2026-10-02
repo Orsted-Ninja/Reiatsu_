@@ -12,12 +12,14 @@ import androidx.lifecycle.viewModelScope
 import com.storagesense.app.action.ActionEngine
 import com.storagesense.app.action.SafeFileOps
 import com.storagesense.app.action.SpaceReclaimer
+import com.storagesense.app.data.local.room.ActionLogDao
 import com.storagesense.app.domain.model.ActionProposal
 import com.storagesense.app.domain.model.FileCategory
 import com.storagesense.app.domain.model.FileItem
 import com.storagesense.app.domain.repository.FileRepository
 import com.storagesense.app.domain.usecase.DuplicateDetectionUseCase
 import com.storagesense.app.indexing.StorageIndexManager
+import com.storagesense.app.ui.util.RecentFilesHelper
 import com.storagesense.app.ui.components.StorageInsight
 import com.storagesense.app.ui.components.StorageSegment
 import com.storagesense.app.ui.theme.StorageApp
@@ -194,7 +196,9 @@ class ViewViewModel @Inject constructor(
     private val spaceReclaimer: SpaceReclaimer,
     private val actionEngine: ActionEngine,
     private val safeFileOps: SafeFileOps,
-    private val storageIndexManager: StorageIndexManager
+    private val storageIndexManager: StorageIndexManager,
+    private val actionLogDao: ActionLogDao,
+    private val recentFilesHelper: RecentFilesHelper
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ViewUiState())
@@ -304,7 +308,7 @@ class ViewViewModel @Inject constructor(
             val allFiles = fileRepository.getAllFiles()
             val filtered = when (category) {
                 ViewCategoryType.PHOTOS -> allFiles.filter {
-                    (it.category == FileCategory.IMAGE_PHOTO) && !it.path.contains("screenshot", ignoreCase = true)
+                    it.category == FileCategory.IMAGE_PHOTO || it.category == FileCategory.IMAGE_SCREENSHOT
                 }
                 ViewCategoryType.SCREENSHOTS -> allFiles.filter {
                     it.category == FileCategory.IMAGE_SCREENSHOT || it.path.contains("screenshot", ignoreCase = true)
@@ -318,19 +322,21 @@ class ViewViewModel @Inject constructor(
                 }
                 ViewCategoryType.AUDIO -> allFiles.filter { it.category == FileCategory.AUDIO }
                 ViewCategoryType.DOWNLOADS -> allFiles.filter { it.path.contains("download", ignoreCase = true) }
-                ViewCategoryType.APPS -> allFiles.filter { it.category == FileCategory.INSTALLER || it.extension.equals("apk", ignoreCase = true) }
+                ViewCategoryType.APPS -> allFiles.filter {
+                    it.category == FileCategory.INSTALLER || it.category == FileCategory.ARCHIVE || it.extension.equals("apk", ignoreCase = true)
+                }
                 ViewCategoryType.ARCHIVES -> allFiles.filter { it.category == FileCategory.ARCHIVE }
             }
 
             val title = when (category) {
-                ViewCategoryType.PHOTOS -> "Photos"
+                ViewCategoryType.PHOTOS -> "Images & Photos"
                 ViewCategoryType.SCREENSHOTS -> "Screenshots"
                 ViewCategoryType.VIDEOS -> "Videos"
-                ViewCategoryType.DOCUMENTS -> "Documents"
-                ViewCategoryType.AUDIO -> "Audio"
+                ViewCategoryType.DOCUMENTS -> "Documents & PDFs"
+                ViewCategoryType.AUDIO -> "Audio & Music"
                 ViewCategoryType.DOWNLOADS -> "Downloads"
-                ViewCategoryType.APPS -> "Apps & Installers"
-                ViewCategoryType.ARCHIVES -> "Archives"
+                ViewCategoryType.APPS -> "APKs & Archives"
+                ViewCategoryType.ARCHIVES -> "Archives & Zips"
             }
 
             _uiState.value = _uiState.value.copy(
@@ -358,14 +364,67 @@ class ViewViewModel @Inject constructor(
                     allFiles.filter { it.lastModifiedEpochMs >= weekAgo }
                 }
                 CollectionType.RECENTLY_OPENED -> {
-                    allFiles.sortedByDescending { it.lastModifiedEpochMs }.take(40)
+                    val openedPaths = recentFilesHelper.getRecentlyOpenedPaths()
+                    val openedFiles = openedPaths.mapNotNull { p -> allFiles.firstOrNull { it.path == p } }
+                    if (openedFiles.size < 10) {
+                        (openedFiles + allFiles.sortedByDescending { it.lastModifiedEpochMs }).distinctBy { it.path }.take(40)
+                    } else {
+                        openedFiles
+                    }
                 }
                 CollectionType.OLD_FILES -> {
                     val halfYearAgo = now - (180L * 24L * 60L * 60L * 1000L)
                     allFiles.filter { it.lastModifiedEpochMs < halfYearAgo }
                 }
                 CollectionType.RECENTLY_DELETED -> {
-                    emptyList()
+                    val trashFiles = mutableListOf<FileItem>()
+                    val recentLogs = actionLogDao.getRecentActions(100)
+                    val trashDir = safeFileOps.getTrashDirectory()
+                    val onDiskTrashFiles = trashDir.listFiles()?.toList() ?: emptyList()
+                    val mappedPaths = mutableSetOf<String>()
+
+                    for (log in recentLogs) {
+                        val tPath = log.trashPath ?: continue
+                        val f = File(tPath)
+                        if (f.exists()) {
+                            val origName = File(log.originalPath).name
+                            val origExt = File(log.originalPath).extension
+                            trashFiles.add(
+                                FileItem(
+                                    id = log.id,
+                                    path = tPath,
+                                    name = origName,
+                                    extension = origExt,
+                                    sizeBytes = if (log.fileSize > 0) log.fileSize else f.length(),
+                                    lastModifiedEpochMs = log.timestampEpochMs,
+                                    sha256Hash = "",
+                                    category = FileCategory.fromExtension(origExt),
+                                    isImportant = false
+                                )
+                            )
+                            mappedPaths.add(f.absolutePath)
+                        }
+                    }
+
+                    for (f in onDiskTrashFiles) {
+                        if (f.absolutePath !in mappedPaths) {
+                            val ext = f.extension
+                            trashFiles.add(
+                                FileItem(
+                                    id = f.hashCode().toLong(),
+                                    path = f.absolutePath,
+                                    name = f.name,
+                                    extension = ext,
+                                    sizeBytes = f.length(),
+                                    lastModifiedEpochMs = f.lastModified(),
+                                    sha256Hash = "",
+                                    category = FileCategory.fromExtension(ext),
+                                    isImportant = false
+                                )
+                            )
+                        }
+                    }
+                    trashFiles
                 }
                 CollectionType.WHATSAPP_MEDIA -> {
                     allFiles.filter { it.path.contains("WhatsApp", ignoreCase = true) }
@@ -393,6 +452,61 @@ class ViewViewModel @Inject constructor(
         }
     }
 
+    fun recordFileOpened(file: FileItem) {
+        recentFilesHelper.recordOpened(file.path)
+    }
+
+    fun restoreTrashFile(file: FileItem) {
+        viewModelScope.launch {
+            val log = actionLogDao.getByTrashPath(file.path)
+            val origPath = log?.originalPath ?: run {
+                val trashDir = safeFileOps.getTrashDirectory().absolutePath
+                val rel = file.path.removePrefix(trashDir).removePrefix("/")
+                val cleanName = if (rel.contains("_")) rel.substringAfterLast("_") else rel
+                val extDir = Environment.getExternalStorageDirectory()
+                File(File(extDir, "Download"), cleanName).absolutePath
+            }
+            val ok = safeFileOps.restoreFromTrash(file.path, origPath)
+            if (ok) {
+                actionLogDao.markTrashPathUndone(file.path)
+                val restoredItem = file.copy(path = origPath)
+                fileRepository.insertOrUpdate(restoredItem)
+                val updated = _uiState.value.activeDrillDownFiles.filter { it.path != file.path }
+                _uiState.value = _uiState.value.copy(
+                    actionResultMessage = "Restored ${file.name} to original folder",
+                    activeDrillDownFiles = updated
+                )
+                loadData()
+            } else {
+                _uiState.value = _uiState.value.copy(actionResultMessage = "Failed to restore ${file.name}")
+            }
+        }
+    }
+
+    fun permanentlyDeleteTrashFile(file: FileItem) {
+        viewModelScope.launch {
+            safeFileOps.permanentlyDelete(file.path)
+            actionLogDao.deleteByTrashPath(file.path)
+            val updated = _uiState.value.activeDrillDownFiles.filter { it.path != file.path }
+            _uiState.value = _uiState.value.copy(
+                actionResultMessage = "Permanently deleted ${file.name}",
+                activeDrillDownFiles = updated
+            )
+            loadData()
+        }
+    }
+
+    fun emptyTrash() {
+        viewModelScope.launch {
+            val count = safeFileOps.emptyTrash()
+            _uiState.value = _uiState.value.copy(
+                actionResultMessage = "Emptied trash ($count files removed)",
+                activeDrillDownFiles = emptyList()
+            )
+            loadData()
+        }
+    }
+
     fun closeDrillDown() {
         _uiState.value = _uiState.value.copy(
             activeDrillDownTitle = null,
@@ -406,7 +520,7 @@ class ViewViewModel @Inject constructor(
             val result = actionEngine.executeAction(proposal)
             _uiState.value = _uiState.value.copy(actionResultMessage = result.message)
             loadData()
-            val updated = _uiState.value.activeDrillDownFiles.filter { it.id != file.id }
+            val updated = _uiState.value.activeDrillDownFiles.filter { it.path != file.path }
             _uiState.value = _uiState.value.copy(activeDrillDownFiles = updated)
         }
     }
@@ -570,27 +684,6 @@ class ViewViewModel @Inject constructor(
                     }
                 )
             }
-
-            if (mediaList.isEmpty()) {
-                val now = System.currentTimeMillis()
-                val dayMs = 86400000L
-                mediaList.addAll(
-                    listOf(
-                        MediaItem(1, null, "", "Guest_Pass_Abhinan_1.jpg", 3400000L, now - 1 * dayMs, false, null, false, null, true),
-                        MediaItem(2, null, "", "Guest_Pass_Abhinan_2.jpg", 3410000L, now - 1 * dayMs, false, null, false, null, true),
-                        MediaItem(3, null, "", "Architecture_Notebook_Page.jpg", 4200000L, now - 2 * dayMs, false, null, false, null, true),
-                        MediaItem(4, null, "", "Beagle_Puppy_Shot_1.jpg", 3800000L, now - 5 * dayMs, false, null, true, "grp_beagle"),
-                        MediaItem(5, null, "", "Beagle_Puppy_Shot_2.jpg", 3820000L, now - 5 * dayMs, false, null, true, "grp_beagle"),
-                        MediaItem(6, null, "", "Beagle_Puppy_Shot_3.jpg", 3790000L, now - 5 * dayMs, false, null, true, "grp_beagle"),
-                        MediaItem(7, null, "", "Beagle_Sitting_Room.jpg", 4500000L, now - 10 * dayMs, false, null, false),
-                        MediaItem(8, null, "", "Garden_Leaves_Concrete.mp4", 28000000L, now - 12 * dayMs, true, "0:23"),
-                        MediaItem(9, null, "", "Handwritten_Lecture_Notes.jpg", 3100000L, now - 14 * dayMs, false, null, false, null, true),
-                        MediaItem(10, null, "", "Beagle_Floor_Sleeping.jpg", 4100000L, now - 20 * dayMs, false, null, false),
-                        MediaItem(11, null, "", "Campus_Event_Photo.jpg", 5200000L, now - 25 * dayMs, false, null, false),
-                        MediaItem(12, null, "", "Walk_Park_Recording.mp4", 45000000L, now - 30 * dayMs, true, "1:14")
-                    )
-                )
-            }
         }
 
         return mediaList.sortedByDescending { it.dateModifiedEpochMs }
@@ -694,30 +787,35 @@ class ViewViewModel @Inject constructor(
         val apps = files.filter { it.category == FileCategory.INSTALLER || it.extension.equals("apk", ignoreCase = true) }
         val archives = files.filter { it.category == FileCategory.ARCHIVE }
 
-        val appsBytes = (usedDeviceBytes * 0.35).toLong()
-        val photosBytes = if (photos.isNotEmpty()) photos.sumOf { it.sizeBytes } else (usedDeviceBytes * 0.25).toLong()
-        val videosBytes = if (videos.isNotEmpty()) videos.sumOf { it.sizeBytes } else (usedDeviceBytes * 0.20).toLong()
-        val docsBytes = if (docs.isNotEmpty()) docs.sumOf { it.sizeBytes } else (usedDeviceBytes * 0.12).toLong()
-        val otherBytes = (usedDeviceBytes - (appsBytes + photosBytes + videosBytes + docsBytes)).coerceAtLeast(1024L * 1024L * 1024L)
+        val appsBytes = apps.sumOf { it.sizeBytes }
+        val photosBytes = photos.sumOf { it.sizeBytes }
+        val screenshotsBytes = screenshots.sumOf { it.sizeBytes }
+        val videosBytes = videos.sumOf { it.sizeBytes }
+        val docsBytes = docs.sumOf { it.sizeBytes }
+        val audioBytes = audio.sumOf { it.sizeBytes }
+        val archivesBytes = archives.sumOf { it.sizeBytes }
+        val downloadsBytes = downloads.sumOf { it.sizeBytes }
 
-        val sum = (appsBytes + photosBytes + videosBytes + docsBytes + otherBytes).toFloat()
+        val indexedUserBytes = files.sumOf { it.sizeBytes }
+        val otherBytes = (usedDeviceBytes - indexedUserBytes).coerceAtLeast(0L)
+
+        val sum = (indexedUserBytes + otherBytes).toFloat().coerceAtLeast(1.0f)
         val segments = listOf(
-            StorageSegment("Apps", appsBytes, StorageApp, appsBytes / sum),
-            StorageSegment("Photos", photosBytes, StoragePhoto, photosBytes / sum),
-            StorageSegment("Videos", videosBytes, StorageVideo, videosBytes / sum),
             StorageSegment("Documents", docsBytes, StorageDoc, docsBytes / sum),
-            StorageSegment("Other", otherBytes, StorageOther, otherBytes / sum)
+            StorageSegment("Images", (photosBytes + screenshotsBytes), StoragePhoto, (photosBytes + screenshotsBytes) / sum),
+            StorageSegment("Videos", videosBytes, StorageVideo, videosBytes / sum),
+            StorageSegment("Audio", audioBytes, StorageAudio, audioBytes / sum),
+            StorageSegment("APKs & Archives", (appsBytes + archivesBytes), StorageApp, (appsBytes + archivesBytes) / sum),
+            StorageSegment("System / Other", otherBytes, StorageOther, otherBytes / sum)
         )
 
         val categories = listOf(
-            CategoryCardData(ViewCategoryType.PHOTOS, "Photos", photos.size, photos.sumOf { it.sizeBytes }, StoragePhoto),
-            CategoryCardData(ViewCategoryType.VIDEOS, "Videos", videos.size, videos.sumOf { it.sizeBytes }, StorageVideo),
-            CategoryCardData(ViewCategoryType.DOCUMENTS, "Documents", docs.size, docs.sumOf { it.sizeBytes }, StorageDoc),
-            CategoryCardData(ViewCategoryType.AUDIO, "Audio", audio.size, audio.sumOf { it.sizeBytes }, StorageAudio),
-            CategoryCardData(ViewCategoryType.DOWNLOADS, "Downloads", downloads.size, downloads.sumOf { it.sizeBytes }, StorageDownload),
-            CategoryCardData(ViewCategoryType.APPS, "Apps & APKs", apps.size, apps.sumOf { it.sizeBytes }, StorageApp),
-            CategoryCardData(ViewCategoryType.ARCHIVES, "Archives", archives.size, archives.sumOf { it.sizeBytes }, StorageArchive),
-            CategoryCardData(ViewCategoryType.SCREENSHOTS, "Screenshots", screenshots.size, screenshots.sumOf { it.sizeBytes }, StorageScreenshot)
+            CategoryCardData(ViewCategoryType.DOCUMENTS, "Documents & PDFs", docs.size, docsBytes, StorageDoc),
+            CategoryCardData(ViewCategoryType.PHOTOS, "Images & Photos", photos.size + screenshots.size, photosBytes + screenshotsBytes, StoragePhoto),
+            CategoryCardData(ViewCategoryType.VIDEOS, "Videos", videos.size, videosBytes, StorageVideo),
+            CategoryCardData(ViewCategoryType.AUDIO, "Audio & Music", audio.size, audioBytes, StorageAudio),
+            CategoryCardData(ViewCategoryType.APPS, "APKs & Archives", apps.size + archives.size, appsBytes + archivesBytes, StorageApp),
+            CategoryCardData(ViewCategoryType.DOWNLOADS, "Downloads", downloads.size, downloadsBytes, StorageDownload)
         )
 
         val exactDups = duplicateDetectionUseCase.findExactDuplicates()
@@ -736,11 +834,19 @@ class ViewViewModel @Inject constructor(
         val whatsappFiles = files.filter { it.path.contains("WhatsApp", ignoreCase = true) }
         val telegramFiles = files.filter { it.path.contains("Telegram", ignoreCase = true) }
 
+        val openedPaths = recentFilesHelper.getRecentlyOpenedPaths()
+        val openedFiles = openedPaths.mapNotNull { p -> files.firstOrNull { it.path == p } }
+        val recentOpenedFiles = if (openedFiles.size < 10) {
+            (openedFiles + files.sortedByDescending { it.lastModifiedEpochMs }).distinctBy { it.path }.take(30)
+        } else {
+            openedFiles.take(30)
+        }
+
         val collections = listOf(
             CollectionCardData(CollectionType.DUPLICATES, "Duplicates", "Identical duplicate files", duplicateDeleteItems.size, duplicateBytes, StorageDuplicate, if (duplicateBytes > 0) "${formatBytes(duplicateBytes)} reclaimable" else null),
             CollectionCardData(CollectionType.LARGE_FILES, "Large files", "Files above 100 MB", largeFiles.size, largeFiles.sumOf { it.sizeBytes }, StorageVideo),
             CollectionCardData(CollectionType.RECENTLY_ADDED, "Recently added", "Saved in past 7 days", recentAdded.size, recentAdded.sumOf { it.sizeBytes }, StorageDoc),
-            CollectionCardData(CollectionType.RECENTLY_OPENED, "Recently opened", "Active files on device", files.take(30).size, files.take(30).sumOf { it.sizeBytes }, StoragePhoto),
+            CollectionCardData(CollectionType.RECENTLY_OPENED, "Recently opened", "Active files on device", recentOpenedFiles.size, recentOpenedFiles.sumOf { it.sizeBytes }, StoragePhoto),
             CollectionCardData(CollectionType.OLD_FILES, "Old files", "Unmodified in 6+ months", oldFiles.size, oldFiles.sumOf { it.sizeBytes }, StorageOther),
             CollectionCardData(CollectionType.RECENTLY_DELETED, "Recently deleted", "Staged in Trash (30 days)", trashStats.first, trashStats.second, StorageArchive),
             CollectionCardData(CollectionType.WHATSAPP_MEDIA, "WhatsApp Media", "Received images & videos", whatsappFiles.size, whatsappFiles.sumOf { it.sizeBytes }, StoragePhoto),

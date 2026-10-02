@@ -38,6 +38,14 @@ class IntentParser @Inject constructor(
             tryParseJson(raw)?.let { return it }
         }
 
+        // 0.2 Document / Notes Summarization Fast-path
+        if (lower.startsWith("summarize") || lower.startsWith("summary of") || lower.contains("give me a summary") || lower.contains("briefly explain")) {
+            val query = raw.replace(Regex("(?i)^(summarize|summary of|give me a summary of|tell me about|briefly explain)\\s+(all\\s+)?(my\\s+)?"), "").trim()
+            if (query.isNotEmpty() && !query.contains("storage", ignoreCase = true) && !query.contains("space", ignoreCase = true)) {
+                return StorageIntent.Summarize(query = query)
+            }
+        }
+
         // 1. Storage Audit & Space Breakdown
         if (lower.contains("taking up space") || lower.contains("storage space") ||
             lower.contains("storage stats") || lower.contains("storage breakdown") ||
@@ -83,13 +91,13 @@ Analyze this input: "$raw"
 Output ONLY a valid JSON object with an "action" and "query" or other parameters. No markdown formatting or explanation.
 
 Actions:
-- SEARCH: User wants to find files (e.g. "find pdfs", "show cat pics") -> {"action": "SEARCH", "query": "pdfs", "is_image": false}
+- SEARCH: User wants to find files or answers from files (e.g. "find pdfs", "my deep learning notes", "what is my aadhar number") -> {"action": "SEARCH", "query": "aadhar number", "is_image": false}
 - DEDUPLICATE: User wants to find/remove duplicates (e.g. "dedup downloads") -> {"action": "DEDUPLICATE", "query": "downloads"}
 - CLEANUP: User wants to free up space (e.g. "free up 2 gb") -> {"action": "CLEANUP", "target_gb": 2.0}
 - DELETE: User wants to delete something specific (e.g. "delete old assignments") -> {"action": "DELETE", "query": "old assignments"}
-- SUMMARIZE: User asks about space or stats (e.g. "what is taking up space") -> {"action": "SUMMARIZE", "query": ""}
+- SUMMARIZE: User asks to summarize a document, topic, or file (e.g. "summarize my deep learning notes") -> {"action": "SUMMARIZE", "query": "deep learning notes"}
 - UNDO: User wants to reverse a deletion -> {"action": "UNDO", "query": ""}
-- AUDIT: User asks for an overview of their storage -> {"action": "AUDIT", "query": ""}
+- AUDIT: User asks for an overview of storage space or what is taking up space (e.g. "what is taking up space", "storage overview") -> {"action": "AUDIT", "query": ""}
 
 Output JSON:
 """.trimIndent()
@@ -128,7 +136,7 @@ Output JSON:
 
         // Clean search query prefix
         val cleanQuery = raw
-            .replace(Regex("(?i)^(find|search|show|get|list|locate|display)\\s+(all\\s+)?(my\\s+)?"), "")
+            .replace(Regex("(?i)^(find|search|show|get|list|locate|display|what is|what are|where is|tell me|give me)\\s+(all\\s+)?(my\\s+)?"), "")
             .trim()
 
         return StorageIntent.Search(query = cleanQuery.ifEmpty { raw })

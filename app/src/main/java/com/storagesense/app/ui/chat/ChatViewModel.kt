@@ -5,6 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.storagesense.app.action.ActionEngine
 import com.storagesense.app.ai.llm.IntentParser
 import com.storagesense.app.ai.llm.RagEngine
+import com.storagesense.app.ai.ocr.OcrEngine
+import com.storagesense.app.data.extractor.ExtractorFactory
+import com.storagesense.app.data.local.room.DocumentChunkDao
 import com.storagesense.app.domain.model.ActionProposal
 import com.storagesense.app.domain.model.FileItem
 import com.storagesense.app.domain.model.SearchResult
@@ -17,11 +20,13 @@ import com.storagesense.app.domain.usecase.HybridSearchUseCase
 import com.storagesense.app.domain.usecase.SpaceReclaimerUseCase
 import com.storagesense.app.indexing.IndexProgress
 import com.storagesense.app.indexing.StorageIndexManager
+import com.storagesense.app.ui.util.RecentFilesHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 import android.os.Environment
@@ -56,7 +61,11 @@ class ChatViewModel @Inject constructor(
     private val actionEngine: ActionEngine,
     private val ragEngine: RagEngine,
     private val fileRepository: FileRepository,
-    private val storageIndexManager: StorageIndexManager
+    private val storageIndexManager: StorageIndexManager,
+    private val chunkDao: DocumentChunkDao,
+    private val extractorFactory: ExtractorFactory,
+    private val ocrEngine: OcrEngine,
+    private val recentFilesHelper: RecentFilesHelper
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -330,11 +339,16 @@ class ChatViewModel @Inject constructor(
             }
 
             is StorageIntent.Summarize -> {
-                val totalFiles = fileRepository.getTotalIndexedCount()
-                val totalBytes = fileRepository.getTotalStorageBytes()
-                val sysStats = com.storagesense.app.ui.util.StorageStatsHelper.getSystemStorageStats()
-                val usedSys = sysStats.first - sysStats.second
-                addAssistantMessage("Storage summary: $totalFiles files (${formatBytes(totalBytes)}) indexed locally on your device. Android OS is consuming a total of ${formatBytes(usedSys)}. Zero cloud, 100% offline.")
+                val q = intent.query?.trim().orEmpty()
+                if (q.isNotBlank()) {
+                    summarizeDocumentOrTopic(q)
+                } else {
+                    val totalFiles = fileRepository.getTotalIndexedCount()
+                    val totalBytes = fileRepository.getTotalStorageBytes()
+                    val sysStats = com.storagesense.app.ui.util.StorageStatsHelper.getSystemStorageStats()
+                    val usedSys = sysStats.first - sysStats.second
+                    addAssistantMessage("Storage summary: $totalFiles files (${formatBytes(totalBytes)}) indexed locally on your device. Android OS is consuming a total of ${formatBytes(usedSys)}. Zero cloud, 100% offline.")
+                }
             }
 
             is StorageIntent.Undo -> {
@@ -459,6 +473,67 @@ class ChatViewModel @Inject constructor(
 
     fun triggerScan() {
         storageIndexManager.startScan(force = true)
+    }
+
+    fun recordFileOpened(file: FileItem) {
+        recentFilesHelper.recordOpened(file.path)
+    }
+
+    private suspend fun summarizeDocumentOrTopic(query: String) {
+        val results = hybridSearchUseCase(query = query, limit = 5)
+        if (results.isEmpty()) {
+            addAssistantMessage("I searched your storage for **\"$query\"**, but didn't find any matching documents or files to summarize. Try checking the file name or re-indexing in Settings.")
+            return
+        }
+
+        val targetResult = results.first()
+        val targetFile = targetResult.file
+        recentFilesHelper.recordOpened(targetFile.path)
+
+        val assistantMsgId = java.util.UUID.randomUUID().toString()
+        val initialMsg = ChatMessage(
+            id = assistantMsgId,
+            sender = MessageSender.ASSISTANT,
+            text = "Analyzing content of **${targetFile.name}**...",
+            searchResults = listOf(targetResult),
+            isStreaming = true
+        )
+        _uiState.value = _uiState.value.copy(messages = _uiState.value.messages + initialMsg)
+
+        var content = ""
+        try {
+            if (targetFile.id != 0L) {
+                val chunks = chunkDao.getChunksForFile(targetFile.id)
+                if (chunks.isNotEmpty()) {
+                    content = chunks.joinToString("\n\n") { it.text }
+                }
+            }
+            if (content.isBlank()) {
+                val file = File(targetFile.path)
+                if (file.exists() && file.canRead()) {
+                    val ext = extractorFactory.getExtractor(targetFile.extension)
+                    val text = ext?.extractText(file)?.fullText ?: ""
+                    content = if (text.length > 50) {
+                        text
+                    } else if (targetFile.category == FileCategory.DOCUMENT_PDF) {
+                        ocrEngine.recognizePdf(file).fullText
+                    } else {
+                        text
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        if (content.isBlank()) {
+            content = targetResult.matchedSnippet ?: targetFile.name
+        }
+
+        var accumulated = ""
+        ragEngine.streamDocumentSummary(targetFile, query, content).collect { chunk ->
+            accumulated += chunk
+            updateMessage(assistantMsgId, accumulated, isStreaming = true, results = listOf(targetResult))
+        }
+        updateMessage(assistantMsgId, accumulated, isStreaming = false, results = listOf(targetResult))
     }
 
     private fun addAssistantMessage(text: String) {

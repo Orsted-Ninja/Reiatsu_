@@ -15,11 +15,25 @@ class FileRepositoryImpl @Inject constructor(
 ) : FileRepository {
 
     override suspend fun insertOrUpdate(file: FileItem): Long {
-        return dao.insertOrUpdate(FileMetadataEntity.fromDomain(file))
+        val existing = dao.getByPath(file.path)
+        val entity = if (existing != null) {
+            FileMetadataEntity.fromDomain(file.copy(id = existing.id))
+        } else {
+            FileMetadataEntity.fromDomain(file)
+        }
+        return dao.insertOrUpdate(entity)
     }
 
     override suspend fun insertAll(files: List<FileItem>): List<Long> {
-        return dao.insertAll(files.map { FileMetadataEntity.fromDomain(it) })
+        val entities = files.map { file ->
+            val existing = dao.getByPath(file.path)
+            if (existing != null) {
+                FileMetadataEntity.fromDomain(file.copy(id = existing.id))
+            } else {
+                FileMetadataEntity.fromDomain(file)
+            }
+        }
+        return dao.insertAll(entities)
     }
 
     override suspend fun getFileById(id: Long): FileItem? {

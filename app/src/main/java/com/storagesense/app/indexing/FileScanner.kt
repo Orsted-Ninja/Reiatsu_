@@ -230,8 +230,9 @@ class FileScanner @Inject constructor(
         val lowerPath = path.lowercase()
 
         val importantKeywords = listOf(
-            "resume", "cv", "passport", "tax", "w2", "aadhaar", "pan", "certificate",
-            "invoice", "contract", "salary", "offer_letter", "insurance", "statement"
+            "resume", "cv", "passport", "tax", "w2", "aadhaar", "aadhar", "pan", "certificate",
+            "invoice", "contract", "salary", "offer_letter", "insurance", "statement",
+            "voter", "license", "licence", "marksheet", "admitcard", "degree", "hallticket", "payslip"
         )
 
         return importantKeywords.any { lowerName.contains(it) || lowerPath.contains(it) }

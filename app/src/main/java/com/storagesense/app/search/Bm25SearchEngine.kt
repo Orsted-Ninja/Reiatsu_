@@ -13,10 +13,9 @@ class Bm25SearchEngine @Inject constructor(
     private val fileMetadataDao: FileMetadataDao
 ) {
     suspend fun search(query: String, limit: Int = 50): List<SearchResult> {
-        val sanitized = searchDao.sanitizeQuery(query)
-        if (sanitized.isBlank()) return emptyList()
+        if (query.isBlank()) return emptyList()
 
-        val matches = searchDao.searchBm25(sanitized, limit)
+        val matches = searchDao.searchBm25(query, limit)
         val results = mutableListOf<SearchResult>()
 
         for (match in matches) {

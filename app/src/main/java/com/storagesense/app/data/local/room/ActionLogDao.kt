@@ -20,9 +20,18 @@ interface ActionLogDao {
     @Query("SELECT * FROM action_logs WHERE isUndone = 0 ORDER BY timestampEpochMs DESC LIMIT :limit")
     suspend fun getRecentActions(limit: Int = 20): List<ActionLogEntity>
 
+    @Query("SELECT * FROM action_logs WHERE trashPath = :trashPath LIMIT 1")
+    suspend fun getByTrashPath(trashPath: String): ActionLogEntity?
+
     @Query("SELECT * FROM action_logs WHERE isUndone = 0 ORDER BY timestampEpochMs DESC LIMIT 1")
     suspend fun getLastAction(): ActionLogEntity?
 
     @Query("UPDATE action_logs SET isUndone = 1 WHERE actionId = :actionId")
     suspend fun markActionUndone(actionId: String)
+
+    @Query("UPDATE action_logs SET isUndone = 1 WHERE trashPath = :trashPath")
+    suspend fun markTrashPathUndone(trashPath: String)
+
+    @Query("DELETE FROM action_logs WHERE trashPath = :trashPath")
+    suspend fun deleteByTrashPath(trashPath: String)
 }

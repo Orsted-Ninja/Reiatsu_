@@ -43,8 +43,13 @@ class VectorSearchEngine @Inject constructor(
             }
         }
 
-        scored.sortByDescending { it.score }
-        val topChunks = scored.take(limit)
+        // Deduplicate chunks by fileId so each document only appears once with its highest scoring chunk
+        val topChunks = scored
+            .groupBy { it.fileId }
+            .mapValues { (_, chunks) -> chunks.maxByOrNull { it.score }!! }
+            .values
+            .sortedByDescending { it.score }
+            .take(limit)
 
         val results = mutableListOf<SearchResult>()
         for (sc in topChunks) {

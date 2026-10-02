@@ -20,7 +20,8 @@ object RrfFusion {
         val fileMap = mutableMapOf<Long, SearchResult>()
 
         for (list in rankedLists) {
-            for ((rankIndex, item) in list.withIndex()) {
+            val distinctList = list.distinctBy { it.file.id }
+            for ((rankIndex, item) in distinctList.withIndex()) {
                 val fileId = item.file.id
                 val rank = rankIndex + 1 // 1-indexed
                 val reciprocalScore = 1.0f / (k + rank)

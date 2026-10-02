@@ -73,9 +73,9 @@ class IndexingPipeline @Inject constructor(
         val extraction = extractor.extractText(file)
 
         var contentText = extraction.fullText
-        if (extraction.needsOcrFallback && contentText.length < 50) {
-            // PDF OCR fallback
-            val ocr = ocrEngine.recognizeText(file)
+        if ((extraction.needsOcrFallback || contentText.length < 50) && fileItem.category == FileCategory.DOCUMENT_PDF) {
+            // PDF OCR fallback via PdfRenderer
+            val ocr = ocrEngine.recognizePdf(file)
             if (ocr.fullText.isNotBlank()) {
                 contentText = ocr.fullText
             }
@@ -89,8 +89,8 @@ class IndexingPipeline @Inject constructor(
         val chunks = textChunker.chunk(contentText)
         val chunkTexts = chunks.map { it.text }
 
-        // Batch embed chunks
-        val embeddings = chunkTexts.map { textEmbeddingModel.embed(it) }
+        // Embed up to 40 primary chunks to balance neural search accuracy and indexing speed
+        val embeddings = chunkTexts.take(40).map { textEmbeddingModel.embed(it) }
 
         searchRepository.indexDocumentText(
             fileId = fileId,
