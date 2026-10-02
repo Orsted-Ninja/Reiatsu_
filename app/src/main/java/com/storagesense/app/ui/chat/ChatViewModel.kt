@@ -24,11 +24,26 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import android.os.Environment
+import android.os.StatFs
+import com.storagesense.app.domain.model.FileCategory
+import com.storagesense.app.ui.components.StorageInsight
+import com.storagesense.app.ui.components.StorageSegment
+import com.storagesense.app.ui.theme.StorageApp
+import com.storagesense.app.ui.theme.StorageDoc
+import com.storagesense.app.ui.theme.StorageOther
+import com.storagesense.app.ui.theme.StoragePhoto
+import com.storagesense.app.ui.theme.StorageVideo
+
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val isProcessing: Boolean = false,
     val pendingApproval: ActionProposal? = null,
-    val indexProgress: IndexProgress = IndexProgress()
+    val indexProgress: IndexProgress = IndexProgress(),
+    val usedBytes: Long = 128L * 1024L * 1024L * 1024L,
+    val totalBytes: Long = 256L * 1024L * 1024L * 1024L,
+    val segments: List<StorageSegment> = emptyList(),
+    val insights: List<StorageInsight> = emptyList()
 )
 
 @HiltViewModel
@@ -51,7 +66,7 @@ class ChatViewModel @Inject constructor(
         // Initial greeting
         addAssistantMessage(
             "Hello! I am **StorageSense**, your on-device AI storage assistant.\n\n" +
-                    "I analyze the real files and documents on your phone.\n" +
+                    "I understand what's on your phone and help you make sense of it.\n" +
                     "Try asking me:\n" +
                     "• *\"What is taking up space?\"*\n" +
                     "• *\"Show my largest files\"*\n" +
@@ -60,10 +75,15 @@ class ChatViewModel @Inject constructor(
                     "• *\"Free up 5 GB without deleting important\"*"
         )
 
+        loadStorageOverview()
+
         // Observe background indexing progress
         viewModelScope.launch {
             storageIndexManager.progress.collect { prog ->
                 _uiState.value = _uiState.value.copy(indexProgress = prog)
+                if (!prog.isRunning) {
+                    loadStorageOverview()
+                }
             }
         }
 
@@ -333,6 +353,66 @@ class ChatViewModel @Inject constructor(
             } else {
                 addAssistantMessage("No recent actions available to undo.")
             }
+        }
+    }
+
+    fun loadStorageOverview() {
+        viewModelScope.launch {
+            val stat = try {
+                StatFs(Environment.getDataDirectory().path)
+            } catch (e: Exception) {
+                null
+            }
+            val totalDeviceBytes = stat?.totalBytes ?: (256L * 1024L * 1024L * 1024L)
+            val availableDeviceBytes = stat?.availableBytes ?: (128L * 1024L * 1024L * 1024L)
+            val usedDeviceBytes = (totalDeviceBytes - availableDeviceBytes).coerceAtLeast(0L)
+
+            val files = fileRepository.getAllFiles()
+            val photosBytes = files.filter { it.category == FileCategory.IMAGE_PHOTO || it.category == FileCategory.IMAGE_SCREENSHOT }.sumOf { it.sizeBytes }
+            val videosBytes = files.filter { it.category == FileCategory.VIDEO }.sumOf { it.sizeBytes }
+            val docsBytes = files.filter {
+                it.category == FileCategory.DOCUMENT_PDF ||
+                        it.category == FileCategory.DOCUMENT_WORD ||
+                        it.category == FileCategory.DOCUMENT_SLIDES ||
+                        it.category == FileCategory.DOCUMENT_TEXT
+            }.sumOf { it.sizeBytes }
+
+            val appsEstBytes = (usedDeviceBytes * 0.35).toLong()
+            val photosEstBytes = if (photosBytes > 0) photosBytes else (usedDeviceBytes * 0.25).toLong()
+            val videosEstBytes = if (videosBytes > 0) videosBytes else (usedDeviceBytes * 0.20).toLong()
+            val docsEstBytes = if (docsBytes > 0) docsBytes else (usedDeviceBytes * 0.12).toLong()
+            val otherEstBytes = (usedDeviceBytes - (appsEstBytes + photosEstBytes + videosEstBytes + docsEstBytes)).coerceAtLeast(1024L * 1024L * 1024L)
+
+            val sum = (appsEstBytes + photosEstBytes + videosEstBytes + docsEstBytes + otherEstBytes).toFloat()
+            val segments = listOf(
+                StorageSegment("Apps", appsEstBytes, StorageApp, appsEstBytes / sum),
+                StorageSegment("Photos", photosEstBytes, StoragePhoto, photosEstBytes / sum),
+                StorageSegment("Videos", videosEstBytes, StorageVideo, videosEstBytes / sum),
+                StorageSegment("Documents", docsEstBytes, StorageDoc, docsEstBytes / sum),
+                StorageSegment("Other", otherEstBytes, StorageOther, otherEstBytes / sum)
+            )
+
+            val insights = mutableListOf<StorageInsight>()
+            if (videosEstBytes > 1024L * 1024L * 1024L) {
+                insights.add(StorageInsight("Videos are using ${formatBytes(videosEstBytes)}", "Videos occupy a major portion of storage."))
+            }
+            insights.add(StorageInsight("Private on-device indexing", "Zero cloud uploads. Everything stays on this device."))
+
+            _uiState.value = _uiState.value.copy(
+                usedBytes = usedDeviceBytes,
+                totalBytes = totalDeviceBytes,
+                segments = segments,
+                insights = insights
+            )
+        }
+    }
+
+    fun deleteFileDirectly(file: FileItem) {
+        viewModelScope.launch {
+            val proposal = actionEngine.proposeTrash(listOf(file), "Move ${file.name} to Trash")
+            val result = actionEngine.executeAction(proposal)
+            addAssistantMessage("${result.message}\n\n*Safely moved to .storagesense/trash/ (recoverable for 30 days).*")
+            loadStorageOverview()
         }
     }
 

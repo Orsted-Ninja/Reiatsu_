@@ -11,7 +11,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.remember
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import java.io.File
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
@@ -70,8 +78,9 @@ fun FileResultCard(
             .padding(vertical = 4.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+            containerColor = com.storagesense.app.ui.theme.VaultSurfaceContainer.copy(alpha = 0.85f)
         ),
+        border = androidx.compose.foundation.BorderStroke(1.dp, com.storagesense.app.ui.theme.VaultOutlineVariant.copy(alpha = 0.5f)),
         onClick = onClick
     ) {
         Column(
@@ -88,19 +97,48 @@ fun FileResultCard(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
+                    val isImage = file.category == FileCategory.IMAGE_PHOTO ||
+                            file.category == FileCategory.IMAGE_SCREENSHOT ||
+                            file.extension.lowercase() in setOf("jpg", "jpeg", "png", "webp", "gif", "bmp")
+
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(badgeColor.copy(alpha = 0.15f)),
+                            .size(if (isImage) 44.dp else 36.dp)
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                            .background(badgeColor.copy(alpha = 0.15f))
+                            .border(
+                                width = 1.dp,
+                                color = if (isImage) MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f) else Color.Transparent,
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = badgeIcon,
-                            contentDescription = file.extension,
-                            tint = badgeColor,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        if (isImage) {
+                            val context = LocalContext.current
+                            val imageModel = remember(file.path) {
+                                if (file.path.startsWith("content://")) {
+                                    android.net.Uri.parse(file.path)
+                                } else {
+                                    File(file.path)
+                                }
+                            }
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(imageModel)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = file.name,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(
+                                imageVector = badgeIcon,
+                                contentDescription = file.extension,
+                                tint = badgeColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(10.dp))

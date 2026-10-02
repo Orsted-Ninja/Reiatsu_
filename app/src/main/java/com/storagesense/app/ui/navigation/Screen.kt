@@ -2,12 +2,20 @@ package com.storagesense.app.ui.navigation
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.PieChart
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.ui.graphics.vector.ImageVector
 
-sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
-    object Chat : Screen("chat", "Assistant", Icons.Default.ChatBubble)
-    object Dashboard : Screen("dashboard", "Storage", Icons.Default.PieChart)
-    object Settings : Screen("settings", "Settings", Icons.Default.Settings)
+sealed class Screen(
+    val route: String,
+    val title: String,
+    val icon: ImageVector,
+    val selectedIcon: ImageVector
+) {
+    object Chat : Screen("chat", "Chat", Icons.Outlined.ChatBubbleOutline, Icons.Filled.ChatBubble)
+    object View : Screen("view", "View", Icons.Outlined.GridView, Icons.Filled.GridView)
+    object Search : Screen("search", "Search", Icons.Outlined.Search, Icons.Filled.Search)
 }
