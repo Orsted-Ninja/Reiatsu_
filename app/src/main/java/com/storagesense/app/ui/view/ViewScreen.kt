@@ -1,6 +1,5 @@
 package com.storagesense.app.ui.view
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,12 +16,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,7 +27,6 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
@@ -59,25 +55,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.storagesense.app.domain.model.FileItem
 import com.storagesense.app.ui.components.FileDetailSheet
+import com.storagesense.app.ui.components.StorageSegment
 import com.storagesense.app.ui.components.VaultArcGauge
 import com.storagesense.app.ui.theme.AmbientGiltGlow
 import com.storagesense.app.ui.theme.VaultBackground
-import com.storagesense.app.ui.theme.VaultOnPrimary
 import com.storagesense.app.ui.theme.VaultOnSurface
 import com.storagesense.app.ui.theme.VaultOnSurfaceVariant
 import com.storagesense.app.ui.theme.VaultOutline
 import com.storagesense.app.ui.theme.VaultOutlineVariant
 import com.storagesense.app.ui.theme.VaultPrimary
-import com.storagesense.app.ui.theme.VaultPrimaryContainer
 import com.storagesense.app.ui.theme.VaultSecondary
 import com.storagesense.app.ui.theme.VaultSurfaceContainer
 import com.storagesense.app.ui.theme.VaultSurfaceContainerHigh
@@ -140,8 +133,8 @@ fun ViewScreen(
                 // 1. Vault Top Bar
                 item(span = { GridItemSpan(2) }) {
                     VaultTopBar(
-                        usedBytes = uiState.usedBytes,
-                        totalBytes = uiState.totalBytes,
+                        usedBytes = uiState.totalUsedBytes,
+                        totalBytes = uiState.totalDeviceBytes,
                         onScanClick = { viewModel.loadData() }
                     )
                 }
@@ -149,8 +142,8 @@ fun ViewScreen(
                 // 2. Liquid Glass Curved Arc Radial Gauge Hero
                 item(span = { GridItemSpan(2) }) {
                     VaultArcGauge(
-                        usedBytes = uiState.usedBytes,
-                        totalBytes = uiState.totalBytes,
+                        usedBytes = uiState.totalUsedBytes,
+                        totalBytes = uiState.totalDeviceBytes,
                         modifier = Modifier.padding(vertical = 12.dp)
                     )
                 }
@@ -257,19 +250,12 @@ fun ViewScreen(
 
     // Detail Inspection Bottom Sheet
     selectedMediaForDetail?.let { media ->
-        val fileItem = FileItem(
-            id = media.id,
-            path = media.contentUri.toString(),
-            name = media.name,
-            extension = media.mimeType.substringAfter('/', "dat"),
-            sizeBytes = media.sizeBytes,
-            lastModifiedEpochMs = media.dateAddedSec * 1000L
-        )
+        val fileItem = media.toFileItem()
         FileDetailSheet(
             file = fileItem,
             onDismiss = { selectedMediaForDetail = null },
-            onDeleteRequest = { f ->
-                viewModel.deleteSingleMedia(media)
+            onDeleteRequest = { _ ->
+                viewModel.deleteMediaItem(media)
                 selectedMediaForDetail = null
             }
         )
@@ -366,14 +352,14 @@ fun VaultTopBar(
  */
 @Composable
 fun SegmentedMetricGlassPill(
-    segments: List<com.storagesense.app.ui.components.StorageSegment>
+    segments: List<StorageSegment>
 ) {
     val mediaSize = segments.filter { it.name.contains("Photo", true) || it.name.contains("Video", true) }
-        .sumOf { it.bytes }
+        .sumOf { it.sizeBytes }
     val docSize = segments.filter { it.name.contains("Doc", true) || it.name.contains("Archive", true) }
-        .sumOf { it.bytes }
+        .sumOf { it.sizeBytes }
     val systemSize = segments.filter { it.name.contains("App", true) || it.name.contains("Other", true) }
-        .sumOf { it.bytes }
+        .sumOf { it.sizeBytes }
 
     val mediaFormatted = String.format(java.util.Locale.US, "%.1f GB", mediaSize / (1024.0 * 1024.0 * 1024.0))
     val docFormatted = String.format(java.util.Locale.US, "%.1f GB", docSize / (1024.0 * 1024.0 * 1024.0))
@@ -525,7 +511,7 @@ fun VaultMediaCell(
                     .data(item.contentUri)
                     .crossfade(true)
                     .build(),
-                contentDescription = item.name,
+                contentDescription = item.displayName,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
