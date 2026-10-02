@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>StorageSense — Obsidian Vault Desktop</title>
+  
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin=""/>
+  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=JetBrains+Mono:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface": "#131313",
+            "surface-dim": "#131313",
+            "surface-bright": "#3a3939",
+            "surface-container-lowest": "#0e0e0e",
+            "surface-container-low": "#1c1b1b",
+            "surface-container": "#201f1f",
+            "surface-container-high": "#2a2a2a",
+            "surface-container-highest": "#353534",
+            "on-surface": "#e5e2e1",
+            "on-surface-variant": "#d0c5af",
+            "outline": "#99907c",
+            "outline-variant": "#4d4635",
+            "primary": "#f2ca50",
+            "primary-container": "#d4af37",
+            "on-primary": "#3c2f00",
+            "on-primary-container": "#554300",
+            "secondary": "#e2c55e",
+            "tertiary": "#f4c86c",
+            "background": "#131313"
+          },
+          fontFamily: {
+            headline: ["Bodoni Moda", "serif"],
+            mono: ["JetBrains Mono", "monospace"],
+            body: ["Manrope", "sans-serif"]
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    @layer base {
+      html, body { margin: 0; padding: 0; background-color: #0e0e0e; color: #e5e2e1; font-family: 'Manrope', sans-serif; }
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: #131313; }
+      ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: #d4af37; }
+    }
+    .gold-glow { box-shadow: 0 0 14px rgba(242, 202, 80, 0.25); }
+    .gold-border-glow { border: 1px solid rgba(212, 175, 55, 0.35); }
+  </style>
+</head>
+<body class="bg-surface-container-lowest text-on-surface antialiased selection:bg-primary-container selection:text-on-primary-container min-h-screen flex flex-col">
+
+  <!-- Background Ambience -->
+  <div class="pointer-events-none fixed inset-0 z-0 opacity-30 bg-[radial-gradient(circle_at_15%_10%,rgba(212,175,55,0.08)_0%,transparent_50%)]"></div>
+  <div class="pointer-events-none fixed inset-0 z-0 opacity-15 bg-[radial-gradient(#d4af37_0.75px,transparent_0.75px)] [background-size:16px_16px]"></div>
+
+  <!-- TOP HEADER -->
+  <header class="fixed top-0 left-0 right-0 z-50 h-14 bg-surface-container-lowest/90 backdrop-blur-2xl border-b border-surface-container-high shadow-md">
+    <div class="h-14 w-full px-5 flex items-center justify-between">
+      
+      <!-- Brand & Window Controls -->
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-1.5">
+          <div class="w-3 h-3 rounded-full bg-[#ff5f56]/90 shadow-sm cursor-pointer" onclick="window.close()"></div>
+          <div class="w-3 h-3 rounded-full bg-[#ffbd2e]/90 shadow-sm"></div>
+          <div class="w-3 h-3 rounded-full bg-[#27c93f]/90 shadow-sm"></div>
+        </div>
+        <div class="flex items-center gap-2 pl-2">
+          <div class="w-5 h-5 flex items-center justify-center text-primary">
+            <span class="material-symbols-outlined text-[20px]">token</span>
+          </div>
+          <div class="flex items-baseline gap-1.5">
+            <span class="font-headline text-[19px] tracking-tight text-on-surface font-semibold">STORAGESENSE</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-primary mb-1 shadow-[0_0_8px_rgba(242,202,80,0.8)]"></span>
+            <span class="text-[11px] font-mono text-tertiary tracking-widest pl-1">OBSIDIAN VAULT</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Telemetry Disk Bar -->
+      <div id="topStorageWidget" class="hidden md:flex items-center gap-3 bg-surface-container-low/80 px-3.5 py-1.5 rounded-lg border border-surface-container-high shadow-inner">
+        <div class="flex items-center gap-1.5 font-mono text-xs text-on-surface-variant">
+          <span class="material-symbols-outlined text-[14px] text-tertiary">database</span>
+          <span id="diskUsedText" class="text-on-surface font-medium">-- GB</span>
+          <span class="text-outline">/</span>
+          <span id="diskTotalText">-- GB</span>
+        </div>
+        <div class="w-[110px] h-1.5 rounded-full bg-surface-container-highest overflow-hidden flex">
+          <div id="diskProgressBar" class="h-full bg-gradient-to-r from-primary to-primary-container transition-all duration-500" style="width: 0%;"></div>
+        </div>
+        <span id="diskPercentText" class="font-mono text-xs text-primary font-semibold">--%</span>
+      </div>
+
+      <!-- Right Actions & Command Trigger -->
+      <div class="flex items-center gap-3">
+        <div id="topIndexStatus" class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container/70 border border-surface-container-high">
+          <span class="material-symbols-outlined text-[15px] text-tertiary animate-spin" id="syncIcon">sync</span>
+          <span id="syncText" class="font-mono text-xs text-on-surface-variant hidden lg:inline">Ready</span>
+        </div>
+        <button id="cmdPaletteTopBtn" onclick="toggleCmdPalette()" class="flex items-center gap-1 px-2 py-1 rounded bg-surface-container-high border border-outline-variant font-mono text-xs text-on-surface-variant hover:text-primary transition-colors">
+          <span class="text-primary font-bold">⌘</span><span>K</span>
+        </button>
+        <div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-xs shadow-sm" title="Air-gapped Session">
+          SS
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- SIDEBAR NAVIGATION -->
+  <aside class="fixed left-0 top-14 bottom-7 w-[80px] hover:w-60 z-40 group transition-all duration-300 ease-out bg-surface-container-lowest/80 backdrop-blur-2xl border-r border-surface-container-high flex flex-col justify-between py-4 overflow-hidden">
+    <nav class="flex flex-col gap-2 px-2.5 w-full">
+      <button onclick="switchTab('neural_chat')" id="nav_neural_chat" class="nav-item flex items-center h-12 px-3.5 rounded-lg text-primary bg-primary-container/20 border border-primary/30 transition-all overflow-hidden whitespace-nowrap w-full">
+        <span class="material-symbols-outlined text-[22px] min-w-[28px] text-primary">auto_awesome</span>
+        <span class="text-sm ml-3 opacity-0 group-hover:opacity-100 transition-opacity font-medium">Neural Chat</span>
+      </button>
+
+      <button onclick="switchTab('vector_radar')" id="nav_vector_radar" class="nav-item flex items-center h-12 px-3.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all overflow-hidden whitespace-nowrap w-full">
+        <span class="material-symbols-outlined text-[22px] min-w-[28px]">radar</span>
+        <span class="text-sm ml-3 opacity-0 group-hover:opacity-100 transition-opacity font-medium">Vector Radar</span>
+      </button>
+
+      <button onclick="switchTab('vault_view')" id="nav_vault_view" class="nav-item flex items-center h-12 px-3.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all overflow-hidden whitespace-nowrap w-full">
+        <span class="material-symbols-outlined text-[22px] min-w-[28px]">dataset</span>
+        <span class="text-sm ml-3 opacity-0 group-hover:opacity-100 transition-opacity font-medium">Vault View</span>
+      </button>
+    </nav>
+
+    <div class="flex flex-col gap-2 px-2.5 w-full">
+      <div class="h-[1px] w-full bg-surface-container-highest my-1"></div>
+      <button onclick="switchTab('vault_settings')" id="nav_vault_settings" class="nav-item flex items-center h-12 px-3.5 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all overflow-hidden whitespace-nowrap w-full">
+        <span class="material-symbols-outlined text-[22px] min-w-[28px]">settings</span>
+        <span class="text-sm ml-3 opacity-0 group-hover:opacity-100 transition-opacity font-medium">Vault Settings</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN VIEW CONTAINER -->
+  <div class="pl-[80px] flex-1 flex flex-col pt-14 pb-7">
+    
+    <!-- ==================== VIEW 1: NEURAL CHAT ==================== -->
+    <section id="view_neural_chat" class="view-panel flex-1 flex flex-col p-6 max-w-7xl mx-auto w-full gap-5">
+      
+      <!-- Thread Context Header -->
+      <div class="flex items-center justify-between px-5 py-3 rounded-xl bg-surface-container-low border border-surface-container-high shadow-sm">
+        <div class="flex items-center gap-3">
+          <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-surface-container-high text-primary shadow-sm border border-primary/20">
+            <span class="material-symbols-outlined text-[20px] animate-pulse">auto_awesome</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="font-headline text-[18px] text-on-surface font-semibold tracking-tight">StorageSense Neural Co-Pilot</span>
+            <div class="flex items-center gap-2 font-mono text-xs text-on-surface-variant">
+              <span class="w-2 h-2 rounded-full bg-tertiary"></span>
+              <span id="chatModelIndicator">Auto-detecting Local Model...</span>
+              <span class="text-outline">·</span>
+              <span class="text-primary font-medium">Zero Telemetry Leak</span>
+            </div>
+          </div>
+        </div>
+        <div class="hidden sm:flex items-center gap-2 font-mono text-xs">
+          <span class="px-2.5 py-1 rounded bg-surface-container text-tertiary border border-surface-container-high">Air-Gapped RAG</span>
+          <span class="px-2.5 py-1 rounded bg-surface-container-high text-on-surface-variant" id="chatLatencyBadge">0 ms</span>
+        </div>
+      </div>
+
+      <!-- Two-Column Workspace: Chat Canvas (Left) + Citations & Inspector (Right) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 items-start">
+        
+        <!-- Left Chat Column (Col 8) -->
+        <div class="lg:col-span-8 flex flex-col gap-4">
+          <div id="chatMessageCanvas" class="flex flex-col gap-4 p-5 rounded-xl bg-surface-container-lowest border border-surface-container-high min-h-[460px] max-h-[620px] overflow-y-auto shadow-inner">
+            
+            <!-- Default Welcome Bubble -->
+            <div class="flex justify-start w-full">
+              <div class="relative max-w-[92%] rounded-xl p-5 bg-surface-container-low border border-surface-container-high shadow-md">
+                <div class="absolute left-0 top-3 bottom-3 w-1 bg-primary rounded-r"></div>
+                <div class="pl-2 flex flex-col gap-2.5 text-sm leading-relaxed text-on-surface">
+                  <p>Welcome to <strong>StorageSense Obsidian Vault</strong>. I am your local, 100% private on-device intelligence co-pilot.</p>
+                  <p class="text-on-surface-variant">I can search all your indexed documents, detect duplicates, propose space cleanups, or locate specific files across your drives.</p>
+                  <div class="flex flex-wrap gap-2 pt-2">
+                    <button onclick="sendQuickPrompt('What is taking up the most space on my computer?')" class="px-3 py-1.5 rounded-lg bg-surface-container-high hover:bg-primary-container hover:text-on-primary-container text-xs font-mono transition-colors border border-outline-variant">
+                      ⚡ What takes the most space?
+                    </button>
+                    <button onclick="sendQuickPrompt('Find all duplicate files and calculate reclaimable storage')" class="px-3 py-1.5 rounded-lg bg-surface-container-high hover:bg-primary-container hover:text-on-primary-container text-xs font-mono transition-colors border border-outline-variant">
+                      🔄 Scan for duplicates
+                    </button>
+                    <button onclick="sendQuickPrompt('Find all PDF and document notes modified recently')" class="px-3 py-1.5 rounded-lg bg-surface-container-high hover:bg-primary-container hover:text-on-primary-container text-xs font-mono transition-colors border border-outline-variant">
+                      📄 Recent documents
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Chat Input Bar -->
+          <div class="relative w-full rounded-xl bg-surface-container-low border border-surface-container-high p-2 flex items-center gap-2 shadow-lg">
+            <input id="chatInput" type="text" placeholder="Ask your storage co-pilot anything (e.g. 'find my machine learning notes', 'clean up 5 GB')..." 
+                   class="flex-1 bg-transparent px-3 py-2 text-sm text-on-surface placeholder:text-outline focus:outline-none"
+                   onkeydown="if(event.key==='Enter') executeChat()"/>
+            <button onclick="executeChat()" id="chatSendBtn" class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-on-primary font-mono text-xs font-semibold hover:bg-primary-container transition-all shadow-sm">
+              <span>PROMPT</span>
+              <span class="material-symbols-outlined text-[16px]">send</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right Citations & File Proofs (Col 4) -->
+        <div class="lg:col-span-4 flex flex-col gap-4">
+          <div class="rounded-xl bg-surface-container-low border border-surface-container-high p-4 flex flex-col gap-3 shadow-md">
+            <div class="flex items-center justify-between pb-1 border-b border-surface-container-high">
+              <span class="font-headline text-base text-on-surface font-medium flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[18px] text-primary">bookmark</span>
+                Grounded Citations
+              </span>
+              <span id="citationCountBadge" class="font-mono text-xs text-tertiary">0 Verified</span>
+            </div>
+            
+            <div id="citationListContainer" class="flex flex-col gap-2.5 max-h-[460px] overflow-y-auto">
+              <div class="text-xs text-outline p-3 text-center">No active citations yet. Run a prompt to see grounded file proofs.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ==================== VIEW 2: VECTOR RADAR ==================== -->
+    <section id="view_vector_radar" class="view-panel hidden flex-1 flex flex-col p-6 max-w-7xl mx-auto w-full gap-5">
+      
+      <!-- Top Search Bar -->
+      <div class="relative w-full h-16 rounded-xl bg-surface-container-low/90 backdrop-blur-xl border border-surface-container-high shadow-xl flex items-center justify-between px-4 gap-3">
+        <div class="flex items-center gap-3 flex-1 min-w-0">
+          <span class="material-symbols-outlined text-[24px] text-primary select-none flex-shrink-0">saved_search</span>
+          <input id="radarSearchInput" type="text" placeholder='Search by meaning, content, code or filenames (e.g. "transformer architecture", "invoice 2024")...' 
+                 class="w-full bg-transparent text-base text-on-surface placeholder:text-outline focus:outline-none tracking-wide"
+                 onkeydown="if(event.key==='Enter') executeRadarSearch()"/>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <button onclick="executeRadarSearch()" class="flex items-center gap-1.5 px-4 h-9 rounded-lg bg-primary text-on-primary font-mono text-xs font-semibold hover:bg-primary-container transition-all">
+            <span class="material-symbols-outlined text-[16px]">radar</span>
+            <span>SEARCH</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Modality Filter Chips -->
+      <div class="flex items-center gap-2 overflow-x-auto pb-1">
+        <button onclick="setModalityFilter('all', this)" class="modality-chip px-3.5 py-1 rounded-full bg-primary text-on-primary font-mono text-xs font-semibold tracking-wider">ALL</button>
+        <button onclick="setModalityFilter('docs', this)" class="modality-chip px-3.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-mono text-xs tracking-wider">PDFs & DOCS</button>
+        <button onclick="setModalityFilter('images', this)" class="modality-chip px-3.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-mono text-xs tracking-wider">IMAGES</button>
+        <button onclick="setModalityFilter('videos', this)" class="modality-chip px-3.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-mono text-xs tracking-wider">VIDEOS</button>
+        <button onclick="setModalityFilter('code', this)" class="modality-chip px-3.5 py-1 rounded-full bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high font-mono text-xs tracking-wider">CODE & REPOS</button>
+      </div>
+
+      <!-- Three-Pane Research Container -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 items-start">
+        
+        <!-- Pane A: Left Filter Sidebar (Col 3) -->
+        <aside class="lg:col-span-3 rounded-xl bg-surface-container-low p-4 border border-surface-container-high flex flex-col gap-4 shadow-md">
+          <div class="flex items-center justify-between pb-1 border-b border-surface-container-high">
+            <span class="font-headline text-base text-on-surface">Filters</span>
+            <span id="activeFilterBadge" class="px-2 py-0.5 rounded-full bg-primary-container text-on-primary-container font-mono text-[10px] font-bold">ALL</span>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <span class="font-mono text-xs text-outline uppercase tracking-wider">Quick Actions</span>
+            <button onclick="scanFolderDirect('Downloads')" class="text-left px-3 py-2 rounded bg-surface-container hover:bg-surface-container-high text-xs font-mono text-on-surface transition-colors">
+              📥 Scan Downloads
+            </button>
+            <button onclick="scanFolderDirect('Documents')" class="text-left px-3 py-2 rounded bg-surface-container hover:bg-surface-container-high text-xs font-mono text-on-surface transition-colors">
+              📄 Scan Documents
+            </button>
+            <button onclick="scanFolderDirect('Desktop')" class="text-left px-3 py-2 rounded bg-surface-container hover:bg-surface-container-high text-xs font-mono text-on-surface transition-colors">
+              🖥️ Scan Desktop
+            </button>
+          </div>
+        </aside>
+
+        <!-- Pane B: Center Result Feed (Col 5) -->
+        <div class="lg:col-span-5 flex flex-col gap-3">
+          <div class="flex items-center justify-between px-1">
+            <span id="searchResultStats" class="font-mono text-xs text-outline">Search results will appear here</span>
+          </div>
+          <div id="radarResultList" class="flex flex-col gap-3 max-h-[600px] overflow-y-auto">
+            <div class="p-8 text-center text-outline font-mono text-xs bg-surface-container-low rounded-xl border border-surface-container-high">
+              Enter a query above to launch Tier-1 hybrid search and Tier-2 autonomous filesystem discovery.
+            </div>
+          </div>
+        </div>
+
+        <!-- Pane C: Right Neural Inspector (Col 4) -->
+        <aside class="lg:col-span-4 rounded-xl bg-surface-container-low p-5 border border-surface-container-high flex flex-col gap-4 shadow-lg sticky top-20">
+          <div class="flex items-center justify-between pb-2 border-b border-surface-container-high">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-[18px] text-primary">manage_search</span>
+              <span class="font-headline text-base text-on-surface font-medium">Neural Inspector</span>
+            </div>
+            <span id="inspectorCategoryBadge" class="font-mono text-[11px] text-tertiary uppercase">SELECT FILE</span>
+          </div>
+
+          <div id="inspectorDetails" class="flex flex-col gap-3">
+            <div class="text-xs text-outline p-4 text-center">Select any result card to inspect technical metadata, cryptographic digests, and run file actions.</div>
+          </div>
+        </aside>
+
+      </div>
+
+    </section>
+
+    <!-- ==================== VIEW 3: VAULT VIEW & DEDUP ==================== -->
+    <section id="view_vault_view" class="view-panel hidden flex-1 flex flex-col p-6 max-w-7xl mx-auto w-full gap-5">
+      
+      <div class="flex items-center justify-between px-5 py-3 rounded-xl bg-surface-container-low border border-surface-container-high">
+        <div>
+          <h2 class="font-headline text-lg font-semibold text-on-surface">Vault Deduplication & Hygiene Studio</h2>
+          <p class="text-xs text-on-surface-variant font-mono">Multi-modal duplicate detection (SHA-256 binary + Cosine centroid semantic + pHash image)</p>
+        </div>
+        <button onclick="loadDuplicates()" class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-on-primary font-mono text-xs font-semibold hover:bg-primary-container transition-all">
+          <span class="material-symbols-outlined text-[16px]">refresh</span>
+          <span>RUN AUDIT</span>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="p-4 rounded-xl bg-surface-container-low border border-surface-container-high">
+          <span class="font-mono text-xs text-outline uppercase">Exact Binary Duplicates</span>
+          <div id="exactDupCount" class="font-headline text-2xl font-bold text-primary mt-1">--</div>
+          <span class="text-xs text-on-surface-variant">100% SHA-256 hash collisions</span>
+        </div>
+        <div class="p-4 rounded-xl bg-surface-container-low border border-surface-container-high">
+          <span class="font-mono text-xs text-outline uppercase">Semantic Document Drafts</span>
+          <div id="semanticDupCount" class="font-headline text-2xl font-bold text-tertiary mt-1">--</div>
+          <span class="text-xs text-on-surface-variant">Cosine similarity &ge; 0.88</span>
+        </div>
+        <div class="p-4 rounded-xl bg-surface-container-low border border-surface-container-high">
+          <span class="font-mono text-xs text-outline uppercase">Perceptual Image Sets</span>
+          <div id="imageDupCount" class="font-headline text-2xl font-bold text-secondary mt-1">--</div>
+          <span class="text-xs text-on-surface-variant">pHash distance &le; 5</span>
+        </div>
+      </div>
+
+      <!-- Duplicates List Container -->
+      <div class="rounded-xl bg-surface-container-low border border-surface-container-high p-5 flex flex-col gap-4">
+        <span class="font-headline text-base text-on-surface font-medium">Duplicate File Groups</span>
+        <div id="duplicateGroupsContainer" class="flex flex-col gap-3 max-h-[500px] overflow-y-auto">
+          <div class="text-xs text-outline p-6 text-center font-mono">Click "RUN AUDIT" above to scan for duplicate files.</div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ==================== VIEW 4: VAULT SETTINGS ==================== -->
+    <section id="view_vault_settings" class="view-panel hidden flex-1 flex flex-col p-6 max-w-7xl mx-auto w-full gap-5">
+      
+      <div class="rounded-xl bg-surface-container-low border border-surface-container-high p-5 flex flex-col gap-4">
+        <h2 class="font-headline text-lg font-semibold text-on-surface">StorageSense System & Model Configuration</h2>
+        
+        <!-- Model Selection -->
+        <div class="flex flex-col gap-2 pt-2 border-t border-surface-container-high">
+          <label class="font-mono text-xs text-outline uppercase">Active Local Ollama Model</label>
+          <div class="flex items-center gap-3">
+            <select id="settingsModelSelect" class="bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm text-on-surface font-mono flex-1 focus:outline-none">
+              <option value="">Loading models...</option>
+            </select>
+            <button onclick="applySelectedModel()" class="px-4 py-2 rounded-lg bg-primary text-on-primary font-mono text-xs font-semibold hover:bg-primary-container transition-all">
+              SWITCH MODEL
+            </button>
+          </div>
+        </div>
+
+        <!-- Ingest Custom Folder -->
+        <div class="flex flex-col gap-2 pt-4 border-t border-surface-container-high">
+          <label class="font-mono text-xs text-outline uppercase">Ingest Storage Directory</label>
+          <div class="flex items-center gap-3">
+            <input id="settingsScanPath" type="text" placeholder="Enter absolute folder path (e.g. C:\Users\YourName\Documents)..." 
+                   class="bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm text-on-surface font-mono flex-1 focus:outline-none"/>
+            <button onclick="startCustomScan()" class="px-4 py-2 rounded-lg bg-primary text-on-primary font-mono text-xs font-semibold hover:bg-primary-container transition-all">
+              START SCAN
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </div>
+
+  <!-- COMMAND PALETTE (CMD+K / CTRL+K) -->
+  <div id="cmdPaletteOverlay" class="fixed inset-0 z-50 bg-surface-container-lowest/80 backdrop-blur-md hidden flex items-start justify-center pt-24 px-4" onclick="if(event.target===this) toggleCmdPalette()">
+    <div class="relative w-full max-w-[620px] rounded-xl bg-surface-container-high border border-outline-variant shadow-2xl p-5 flex flex-col gap-4">
+      <div class="flex items-center gap-3 pb-2 border-b border-surface-container-highest">
+        <span class="material-symbols-outlined text-[24px] text-primary">terminal</span>
+        <input id="cmdPaletteInput" type="text" placeholder="Type a command or query..." class="w-full bg-transparent text-lg text-on-surface placeholder:text-outline focus:outline-none"/>
+        <button onclick="toggleCmdPalette()" class="text-outline hover:text-on-surface">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <div class="flex flex-col gap-1 text-sm font-mono">
+        <div onclick="switchTab('neural_chat'); toggleCmdPalette();" class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container cursor-pointer transition-colors">
+          <span class="flex items-center gap-2.5"><span class="material-symbols-outlined text-[18px] text-primary">auto_awesome</span> Open Neural Chat</span>
+          <span class="text-xs text-outline">CHAT</span>
+        </div>
+        <div onclick="switchTab('vector_radar'); toggleCmdPalette();" class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container cursor-pointer transition-colors">
+          <span class="flex items-center gap-2.5"><span class="material-symbols-outlined text-[18px] text-primary">radar</span> Open Vector Radar Search</span>
+          <span class="text-xs text-outline">SEARCH</span>
+        </div>
+        <div onclick="switchTab('vault_view'); toggleCmdPalette();" class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container cursor-pointer transition-colors">
+          <span class="flex items-center gap-2.5"><span class="material-symbols-outlined text-[18px] text-primary">dataset</span> Run Duplicate Audit</span>
+          <span class="text-xs text-outline">DEDUP</span>
+        </div>
+        <div onclick="scanFolderDirect('Downloads'); toggleCmdPalette();" class="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-container cursor-pointer transition-colors">
+          <span class="flex items-center gap-2.5"><span class="material-symbols-outlined text-[18px] text-tertiary">folder</span> Scan Downloads Folder</span>
+          <span class="text-xs text-outline">INGEST</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM STATUS BAR -->
+  <footer class="fixed bottom-0 left-0 right-0 z-50 h-7 bg-surface-container-lowest/90 backdrop-blur-md border-t border-surface-container-high px-5 flex items-center justify-between font-mono text-xs text-on-surface-variant">
+    <div class="flex items-center gap-3">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"></span>
+      <span class="text-on-surface">Local AI Engine</span>
+      <span class="text-outline">·</span>
+      <span>Air-gapped</span>
+      <span class="text-outline">·</span>
+      <span class="text-tertiary">0 bytes leaked</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-[13px] text-primary">memory</span>
+      <span id="footerModelName">all-MiniLM-L6-v2 + Ollama</span>
+    </div>
+  </footer>
+
+  <!-- SCRIPT CONTROLLER -->
+  <script>
+    let currentTab = 'neural_chat';
+    let currentModality = 'all';
+    let selectedFileForInspector = null;
+
+    // Initialize telemetry
+    async function loadTelemetry() {
+      try {
+        const res = await fetch('/api/telemetry');
+        const data = await res.json();
+        if (data.telemetry) {
+          const used = data.telemetry.drive_used_gb || 0;
+          const total = data.telemetry.drive_total_gb || 1;
+          const percent = data.telemetry.drive_percent || 0;
+          document.getElementById('diskUsedText').innerText = `${used} GB`;
+          document.getElementById('diskTotalText').innerText = `${total} GB`;
+          document.getElementById('diskPercentText').innerText = `${percent}%`;
+          document.getElementById('diskProgressBar').style.width = `${percent}%`;
+        }
+        if (data.llm) {
+          const m = data.llm.active_model || 'Local RAG';
+          document.getElementById('chatModelIndicator').innerText = `Active Model: ${m}`;
+          document.getElementById('footerModelName').innerText = `${m} · Local`;
+          document.getElementById('chatLatencyBadge').innerText = `${data.llm.latency_ms || 0} ms`;
+        }
+        if (data.stats) {
+          document.getElementById('syncText').innerText = `Indexed ${data.stats.total_files} files`;
+          document.getElementById('syncIcon').classList.remove('animate-spin');
+        }
+      } catch (err) {
+        console.warn('Telemetry load failed:', err);
+      }
+    }
+
+    // Switch active view
+    function switchTab(tabId) {
+      currentTab = tabId;
+      document.querySelectorAll('.view-panel').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.nav-item').forEach(el => {
+        el.classList.remove('bg-primary-container/20', 'border-primary/30', 'text-primary');
+        el.classList.add('text-on-surface-variant');
+      });
+
+      const activeView = document.getElementById(`view_${tabId}`);
+      if (activeView) activeView.classList.remove('hidden');
+
+      const activeNav = document.getElementById(`nav_${tabId}`);
+      if (activeNav) {
+        activeNav.classList.add('bg-primary-container/20', 'border-primary/30', 'text-primary');
+        activeNav.classList.remove('text-on-surface-variant');
+      }
+
+      if (tabId === 'vault_settings') loadModels();
+    }
+
+    // Modality filter
+    function setModalityFilter(modality, btn) {
+      currentModality = modality;
+      document.querySelectorAll('.modality-chip').forEach(el => {
+        el.classList.remove('bg-primary', 'text-on-primary', 'font-semibold');
+        el.classList.add('bg-surface-container-low', 'text-on-surface-variant');
+      });
+      if (btn) {
+        btn.classList.add('bg-primary', 'text-on-primary', 'font-semibold');
+        btn.classList.remove('bg-surface-container-low', 'text-on-surface-variant');
+      }
+      document.getElementById('activeFilterBadge').innerText = modality.toUpperCase();
+      executeRadarSearch();
+    }
+
+    // Execute Vector Radar Search
+    async function executeRadarSearch() {
+      const q = document.getElementById('radarSearchInput').value.trim();
+      if (!q) return;
+
+      const resultsContainer = document.getElementById('radarResultList');
+      resultsContainer.innerHTML = '<div class="p-6 text-center text-tertiary font-mono text-xs">Scanning storage & neural vector index...</div>';
+
+      try {
+        const url = `/api/search?q=${encodeURIComponent(q)}&modality=${currentModality}&top_k=25`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        document.getElementById('searchResultStats').innerText = `Found ${data.count} matches in ${data.elapsed_ms} ms`;
+
+        if (!data.results || data.results.length === 0) {
+          resultsContainer.innerHTML = '<div class="p-6 text-center text-outline font-mono text-xs">No matching files found across your local storage.</div>';
+          return;
+        }
+
+        resultsContainer.innerHTML = '';
+        data.results.forEach((r, idx) => {
+          const card = document.createElement('div');
+          card.className = "p-3.5 rounded-xl bg-surface-container-low border border-surface-container-high hover:border-primary/40 cursor-pointer transition-all flex flex-col gap-2";
+          card.onclick = () => showInspector(r);
+
+          const badgeColor = r.category === 'DOCUMENT' ? 'bg-red-900/60 text-red-200' :
+                             r.category === 'IMAGE' ? 'bg-purple-900/60 text-purple-200' :
+                             r.category === 'VIDEO' ? 'bg-amber-900/60 text-amber-200' :
+                             r.category === 'CODE' ? 'bg-blue-900/60 text-blue-200' : 'bg-surface-container-highest text-on-surface';
+
+          card.innerHTML = `
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold ${badgeColor}">${r.extension}</span>
+                <span class="font-medium text-sm text-on-surface truncate max-w-[280px]" title="${r.file_name}">#${idx+1} ${r.file_name}</span>
+              </div>
+              <span class="font-mono text-xs text-primary font-semibold">${Math.round(r.score * 100)}%</span>
+            </div>
+            ${r.snippet ? `<div class="p-2 rounded bg-surface-container-lowest text-xs text-on-surface-variant font-mono leading-relaxed line-clamp-2">${r.snippet}</div>` : ''}
+            <div class="flex items-center justify-between text-[11px] font-mono text-outline pt-1">
+              <span>${formatBytes(r.size_bytes)}</span>
+              <span class="truncate max-w-[200px]">${r.file_path}</span>
+            </div>
+          `;
+          resultsContainer.appendChild(card);
+        });
+
+        // Auto-select first result
+        showInspector(data.results[0]);
+
+      } catch (err) {
+        resultsContainer.innerHTML = `<div class="p-4 text-center text-red-400 font-mono text-xs">Search error: ${err.message}</div>`;
+      }
+    }
+
+    // Show Details in Neural Inspector (Right Column)
+    function showInspector(file) {
+      selectedFileForInspector = file;
+      document.getElementById('inspectorCategoryBadge').innerText = file.category || 'FILE';
+
+      const container = document.getElementById('inspectorDetails');
+      container.innerHTML = `
+        <div class="flex flex-col gap-1 p-3 rounded-lg bg-surface-container-lowest border border-surface-container-highest">
+          <span class="font-medium text-sm text-on-surface break-words">${file.file_name}</span>
+          <span class="font-mono text-[11px] text-outline break-all">${file.file_path}</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 font-mono text-xs p-3 rounded-lg bg-surface-container-lowest border border-surface-container-highest">
+          <div><span class="text-outline">Size:</span> <span class="text-on-surface">${formatBytes(file.size_bytes)}</span></div>
+          <div><span class="text-outline">Type:</span> <span class="text-primary">${file.extension}</span></div>
+          <div><span class="text-outline">Chunks:</span> <span class="text-tertiary">${file.chunk_count || 1}</span></div>
+          <div><span class="text-outline">Score:</span> <span class="text-primary">${file.score}</span></div>
+        </div>
+
+        <div class="flex flex-col gap-2 pt-2">
+          <button onclick="openFileInOS('${encodeURIComponent(file.file_path)}')" class="w-full py-2 rounded-lg bg-primary text-on-primary font-mono text-xs font-semibold hover:bg-primary-container transition-all flex items-center justify-center gap-1.5 shadow-sm">
+            <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+            <span>Open File</span>
+          </button>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="revealFileInOS('${encodeURIComponent(file.file_path)}')" class="py-2 rounded-lg bg-surface-container hover:bg-surface-container-high font-mono text-xs text-on-surface transition-all flex items-center justify-center gap-1">
+              <span class="material-symbols-outlined text-[15px] text-tertiary">folder_open</span>
+              <span>Explorer</span>
+            </button>
+            <button onclick="quarantineFile('${encodeURIComponent(file.file_path)}')" class="py-2 rounded-lg bg-surface-container hover:bg-red-950 font-mono text-xs text-red-300 transition-all flex items-center justify-center gap-1">
+              <span class="material-symbols-outlined text-[15px]">delete</span>
+              <span>Quarantine</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Execute Neural Chat
+    async function executeChat() {
+      const input = document.getElementById('chatInput');
+      const msg = input.value.trim();
+      if (!msg) return;
+
+      input.value = '';
+      const canvas = document.getElementById('chatMessageCanvas');
+
+      // Append User Bubble
+      const userBubble = document.createElement('div');
+      userBubble.className = "flex justify-end w-full";
+      userBubble.innerHTML = `
+        <div class="max-w-[75%] rounded-xl p-4 bg-surface-container-high border border-outline-variant/30 text-on-surface shadow-md">
+          <p class="text-sm leading-relaxed">${escapeHtml(msg)}</p>
+          <div class="flex justify-end items-center gap-1 mt-1 font-mono text-[10px] text-outline">
+            <span>Just now</span>
+            <span class="material-symbols-outlined text-[12px] text-tertiary">done_all</span>
+          </div>
+        </div>
+      `;
+      canvas.appendChild(userBubble);
+      canvas.scrollTop = canvas.scrollHeight;
+
+      // Append Thinking Placeholder
+      const thinkingBubble = document.createElement('div');
+      thinkingBubble.className = "flex justify-start w-full";
+      thinkingBubble.id = "thinkingBubblePlaceholder";
+      thinkingBubble.innerHTML = `
+        <div class="relative max-w-[85%] rounded-xl p-4 bg-surface-container-low border border-surface-container-high shadow-md">
+          <div class="absolute left-0 top-3 bottom-3 w-1 bg-primary rounded-r"></div>
+          <div class="pl-2 font-mono text-xs text-tertiary flex items-center gap-2">
+            <span class="material-symbols-outlined text-[16px] animate-spin">sync</span>
+            <span>Reasoning across local vector memory...</span>
+          </div>
+        </div>
+      `;
+      canvas.appendChild(thinkingBubble);
+      canvas.scrollTop = canvas.scrollHeight;
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ message: msg })
+        });
+        const data = await res.json();
+
+        thinkingBubble.remove();
+
+        // Append Assistant Bubble
+        const asstBubble = document.createElement('div');
+        asstBubble.className = "flex justify-start w-full";
+        asstBubble.innerHTML = `
+          <div class="relative max-w-[90%] rounded-xl p-5 bg-surface-container-low border border-surface-container-high shadow-xl">
+            <div class="absolute left-0 top-3 bottom-3 w-1 bg-primary rounded-r"></div>
+            <div class="pl-2 flex flex-col gap-3">
+              <div class="text-sm leading-relaxed text-on-surface whitespace-pre-wrap">${data.reply}</div>
+              
+              <div class="flex items-center gap-2 pt-2 border-t border-surface-container-high text-xs font-mono text-outline">
+                <span class="text-primary">${data.metrics ? data.metrics.matched_files_count : 0} files cited</span>
+                <span>·</span>
+                <span>${data.metrics ? data.metrics.elapsed_ms : 0} ms</span>
+              </div>
+            </div>
+          </div>
+        `;
+        canvas.appendChild(asstBubble);
+        canvas.scrollTop = canvas.scrollHeight;
+
+        // Render citations on right panel
+        renderCitations(data.citations || []);
+
+      } catch (err) {
+        thinkingBubble.remove();
+        alert('Chat query error: ' + err.message);
+      }
+    }
+
+    function sendQuickPrompt(promptText) {
+      document.getElementById('chatInput').value = promptText;
+      executeChat();
+    }
+
+    // Render citations on right panel
+    function renderCitations(citations) {
+      const container = document.getElementById('citationListContainer');
+      document.getElementById('citationCountBadge').innerText = `${citations.length} Verified`;
+
+      if (citations.length === 0) {
+        container.innerHTML = '<div class="text-xs text-outline p-3 text-center">No direct citation proofs for this query.</div>';
+        return;
+      }
+
+      container.innerHTML = '';
+      citations.forEach(c => {
+        const item = document.createElement('div');
+        item.className = "p-3 rounded-lg bg-surface-container-lowest border border-surface-container-highest flex flex-col gap-1.5 cursor-pointer hover:border-primary/40 transition-colors";
+        item.onclick = () => openFileInOS(encodeURIComponent(c.file_path));
+        item.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="font-medium text-xs text-on-surface truncate max-w-[200px]">${c.file_name}</span>
+            <span class="font-mono text-[10px] text-primary">${Math.round(c.score * 100)}%</span>
+          </div>
+          ${c.snippet ? `<p class="text-[11px] text-on-surface-variant font-mono line-clamp-2">${c.snippet}</p>` : ''}
+          <div class="flex items-center justify-between text-[10px] font-mono text-outline">
+            <span>${c.extension}</span>
+            <span>${formatBytes(c.size_bytes)}</span>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    // File Actions
+    async function openFileInOS(encodedPath) {
+      const path = decodeURIComponent(encodedPath);
+      await fetch('/api/open', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ file_path: path })
+      });
+    }
+
+    async function revealFileInOS(encodedPath) {
+      const path = decodeURIComponent(encodedPath);
+      await fetch('/api/reveal', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ file_path: path })
+      });
+    }
+
+    async function quarantineFile(encodedPath) {
+      const path = decodeURIComponent(encodedPath);
+      if (confirm(`Quarantine ${path} to reversible .trash sandbox?`)) {
+        await fetch('/api/trash', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ file_path: path })
+        });
+        alert('File quarantined safely into .trash sandbox.');
+        executeRadarSearch();
+      }
+    }
+
+    // Duplicates Audit
+    async function loadDuplicates() {
+      const container = document.getElementById('duplicateGroupsContainer');
+      container.innerHTML = '<div class="p-6 text-center text-tertiary font-mono text-xs">Computing cryptographic hashes and embeddings...</div>';
+
+      try {
+        const res = await fetch('/api/dedup');
+        const data = await res.json();
+
+        const exact = data.exact_duplicates || [];
+        const semantic = data.semantic_duplicates || [];
+        const image = data.image_duplicates || [];
+
+        document.getElementById('exactDupCount').innerText = `${exact.length} Sets`;
+        document.getElementById('semanticDupCount').innerText = `${semantic.length} Sets`;
+        document.getElementById('imageDupCount').innerText = `${image.length} Sets`;
+
+        const allGroups = [...exact, ...semantic, ...image];
+        if (allGroups.length === 0) {
+          container.innerHTML = '<div class="p-6 text-center text-emerald-400 font-mono text-xs">✨ Zero duplicates found! Your storage is completely clean.</div>';
+          return;
+        }
+
+        container.innerHTML = '';
+        allGroups.forEach(g => {
+          const card = document.createElement('div');
+          card.className = "p-4 rounded-xl bg-surface-container-lowest border border-surface-container-highest flex flex-col gap-3";
+          
+          let dupsHtml = g.duplicates.map(d => `
+            <div class="flex items-center justify-between p-2 rounded bg-surface-container-low text-xs font-mono">
+              <span class="truncate max-w-[340px] text-red-300">${d.path}</span>
+              <button onclick="quarantineFile('${encodeURIComponent(d.path)}')" class="px-2 py-1 rounded bg-red-950 text-red-200 hover:bg-red-900 transition-colors">
+                Quarantine
+              </button>
+            </div>
+          `).join('');
+
+          card.innerHTML = `
+            <div class="flex items-center justify-between border-b border-surface-container-highest pb-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary-container text-on-primary-container font-bold">${g.type}</span>
+                <span class="text-xs font-mono text-tertiary">Match Confidence: ${Math.round(g.score * 100)}%</span>
+              </div>
+              <span class="font-mono text-xs text-outline">${formatBytes(g.keep.size_bytes)}</span>
+            </div>
+            <div class="flex flex-col gap-1">
+              <span class="text-xs font-mono text-emerald-400">Keep Master: <strong>${g.keep.path}</strong></span>
+              <span class="text-xs font-mono text-outline pt-1">Redundant Copies:</span>
+              ${dupsHtml}
+            </div>
+          `;
+          container.appendChild(card);
+        });
+
+      } catch (err) {
+        container.innerHTML = `<div class="p-4 text-center text-red-400 font-mono text-xs">Dedup audit error: ${err.message}</div>`;
+      }
+    }
+
+    // Models & Settings
+    async function loadModels() {
+      try {
+        const res = await fetch('/api/models');
+        const data = await res.json();
+        const select = document.getElementById('settingsModelSelect');
+        select.innerHTML = '';
+        data.available_models.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.innerText = m;
+          if (m === data.active_model) opt.selected = true;
+          select.appendChild(opt);
+        });
+      } catch (err) {
+        console.warn('Load models failed:', err);
+      }
+    }
+
+    async function applySelectedModel() {
+      const select = document.getElementById('settingsModelSelect');
+      const val = select.value;
+      if (!val) return;
+      await fetch('/api/set_model', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ model_name: val })
+      });
+      alert(`Active model updated to ${val}`);
+      loadTelemetry();
+    }
+
+    async function scanFolderDirect(preset) {
+      const res = await fetch('/api/presets');
+      const presets = await res.json();
+      const path = presets[preset] || presets[`Downloads (${preset})`] || Object.values(presets)[0];
+      if (path) {
+        await fetch('/api/scan', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ folder_path: path })
+        });
+        alert(`Indexing queued for ${path}!`);
+        loadTelemetry();
+      }
+    }
+
+    async function startCustomScan() {
+      const p = document.getElementById('settingsScanPath').value.trim();
+      if (!p) return;
+      await fetch('/api/scan', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ folder_path: p })
+      });
+      alert(`Indexing initiated for ${p}!`);
+      loadTelemetry();
+    }
+
+    function toggleCmdPalette() {
+      const overlay = document.getElementById('cmdPaletteOverlay');
+      overlay.classList.toggle('hidden');
+      if (!overlay.classList.contains('hidden')) {
+        setTimeout(() => document.getElementById('cmdPaletteInput').focus(), 50);
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        toggleCmdPalette();
+      }
+      if (e.key === 'Escape') {
+        document.getElementById('cmdPaletteOverlay').classList.add('hidden');
+      }
+    });
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.innerText = text;
+      return div.innerHTML;
+    }
+
+    // Auto-load telemetry on startup
+    loadTelemetry();
+    setInterval(loadTelemetry, 8000);
+  </script>
+</body>
+</html>
