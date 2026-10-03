@@ -16,7 +16,7 @@ captures
 .storagesense/
 stitch_design/
 *.png
-!docs/assets/logo.png
+!docs/assets/*.png
 pc_port/
 *.db
 *.diff

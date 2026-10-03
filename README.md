@@ -69,26 +69,26 @@
 flowchart TD
     User["User Query / Action"] --> UI["Jetpack Compose UI (Chat / View / Search)"]
     
-    subgraph Natural Language Understanding & Search
+    subgraph NLU ["Natural Language Understanding & Search"]
         UI --> Intent["SearchDao & Intent Classifier"]
-        Intent -->|Query Normalization| Expander["Acronym & Synonym Expander<br/>(DL <-> Deep Learning, Notes <-> Modules)"]
-        Expander --> BM25["SQLite FTS4 BM25 Engine<br/>matchinfo('pcx') scoring"]
-        Expander --> ONNX["ONNX Runtime INT8<br/>all-MiniLM-L6-v2 Embeddings"]
-        BM25 --> RRF["RrfFusion (k=60)<br/>Document-Level Deduplication"]
+        Intent -->|Query Normalization| Expander["Acronym & Synonym Expander (DL ↔ Deep Learning, Notes ↔ Modules)"]
+        Expander --> BM25["SQLite FTS4 BM25 Engine (matchinfo 'pcx' scoring)"]
+        Expander --> ONNX["ONNX Runtime INT8 (all-MiniLM-L6-v2 Embeddings)"]
+        BM25 --> RRF["RrfFusion (k=60) Document-Level Deduplication"]
         ONNX --> RRF
     end
 
-    subgraph Neural Reasoning & Extraction
+    subgraph Neural_Reasoning ["Neural Reasoning & Extraction"]
         RRF --> RAG["RagEngine"]
-        RAG -->|Model Available| Gemma["OnDeviceLlmEngine (Gemma 4 E2B / 2B)<br/>MediaPipe GenAI GPU / NPU"]
-        RAG -->|Standby Fallback| Semantic["On-Device Semantic Extractor &<br/>JIT ML Kit OCR + UIDAI Regex Verification"]
+        RAG -->|Model Available| Gemma["OnDeviceLlmEngine (Gemma 4 E2B / 2B) MediaPipe GenAI GPU / NPU"]
+        RAG -->|Standby Fallback| Semantic["On-Device Semantic Extractor & JIT ML Kit OCR + UIDAI Verification"]
     end
 
-    subgraph File & Storage Operations
+    subgraph File_Ops ["File & Storage Operations"]
         UI --> Categories["OS Breakdown & Category Browser"]
         UI --> Viewer["UniversalFileViewer (PDF, DOCX, PPTX, Media)"]
         UI --> Safety["SpaceReclaimer & DuplicateDetector"]
-        Safety --> Trash["Staging Trash (~/.storagesense/trash/)<br/>+ Room ActionLogDao Undo Log"]
+        Safety --> Trash["Staging Trash (~/.storagesense/trash/) + Room ActionLogDao Undo Log"]
     end
 ```
 
@@ -218,6 +218,16 @@ adb push gemma-2b-it-gpu-int4.bin /sdcard/Download/models/
 ### 📄 Universal In-App Viewer
 * Tap any file card in search results or category sheets to open the document directly inside Reiatsu.
 * Supports pinch-to-zoom for photos, text search for documents, and fullscreen playback for video.
+
+<p align="center">
+  <img src="docs/assets/showcase_chat.png" alt="Reiatsu AI Chat Assistant" width="48%" />
+  <img src="docs/assets/showcase_privacy.png" alt="Zero-Cloud Privacy & Safety Architecture" width="48%" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/showcase_breakdown.png" alt="Live OS Storage Breakdown & Radial Gauge" width="48%" />
+  <img src="docs/assets/showcase_search.png" alt="Vault Neural Search & Multi-Filter Index" width="48%" />
+</p>
 
 ---
 
