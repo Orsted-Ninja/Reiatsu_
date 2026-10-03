@@ -1,36 +1,76 @@
 package com.storagesense.app.ai.face
 
+import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.BitmapRegionDecoder
 import android.graphics.PointF
+import android.graphics.Rect
+import android.net.Uri
+import android.os.Build
+import android.util.Log
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceContour
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.face.FaceLandmark
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
 import kotlin.math.sqrt
 
 data class DetectedFaceResult(
-    val cropBitmap: Bitmap,
+    val cropBitmap: Bitmap?,
     val landmarkEmbedding: FloatArray
 )
 
-class FaceDetectionEngine {
+@Singleton
+class FaceDetectionEngine @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
     private val options = FaceDetectorOptions.Builder()
-        .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
+        .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
         .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
         .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
-        .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
-        .setMinFaceSize(0.12f)
+        .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
+        .setMinFaceSize(0.10f)
         .build()
 
     private val detector = FaceDetection.getClient(options)
 
     /**
-     * Detects faces and computes pure on-device geometric feature vectors using Google ML Kit.
-     * Requires ZERO external models or downloads.
+     * Efficiently processes a photo file directly via Google ML Kit.
+     * Uses InputImage.fromFilePath to handle EXIF rotation and large (12-108MP) camera photos without OutOfMemoryError.
      */
+    suspend fun detectFacesInFile(file: File): List<DetectedFaceResult> = withContext(Dispatchers.Default) {
+        if (!file.exists() || !file.canRead() || file.length() == 0L) return@withContext emptyList()
+
+        try {
+            val image = InputImage.fromFilePath(context, Uri.fromFile(file))
+            val faces = detector.process(image).await()
+            if (faces.isEmpty()) return@withContext emptyList()
+
+            Log.d("FaceDetectionEngine", "Detected ${faces.size} faces in ${file.name}")
+
+            val results = mutableListOf<DetectedFaceResult>()
+            for (face in faces) {
+                val bounds = face.boundingBox
+                val embedding = extractMlKitLandmarkVector(face, bounds.width().toFloat(), bounds.height().toFloat())
+                val crop = cropFaceSafely(file, bounds)
+                results.add(DetectedFaceResult(cropBitmap = crop, landmarkEmbedding = embedding))
+            }
+            results
+        } catch (t: Throwable) {
+            Log.e("FaceDetectionEngine", "Failed detecting faces in ${file.name}: ${t.message}")
+            emptyList()
+        }
+    }
+
     suspend fun detectFacesWithFeatures(bitmap: Bitmap): List<DetectedFaceResult> {
         val image = InputImage.fromBitmap(bitmap, 0)
         val faces = detector.process(image).await()
@@ -45,20 +85,54 @@ class FaceDetectionEngine {
             val width = right - left
             val height = bottom - top
 
-            if (width > 20 && height > 20) {
-                val faceCrop = Bitmap.createBitmap(bitmap, left, top, width, height)
-                val embedding = extractMlKitLandmarkVector(face, bounds.width().toFloat(), bounds.height().toFloat())
-                results.add(DetectedFaceResult(cropBitmap = faceCrop, landmarkEmbedding = embedding))
-            }
+            val faceCrop = if (width > 20 && height > 20) {
+                Bitmap.createBitmap(bitmap, left, top, width, height)
+            } else null
+
+            val embedding = extractMlKitLandmarkVector(face, bounds.width().toFloat(), bounds.height().toFloat())
+            results.add(DetectedFaceResult(cropBitmap = faceCrop, landmarkEmbedding = embedding))
         }
         return results
     }
 
-    /**
-     * Compatibility method returning just crop bitmaps
-     */
     suspend fun detectFaces(bitmap: Bitmap): List<Bitmap> {
-        return detectFacesWithFeatures(bitmap).map { it.cropBitmap }
+        return detectFacesWithFeatures(bitmap).mapNotNull { it.cropBitmap }
+    }
+
+    private fun cropFaceSafely(file: File, bounds: Rect): Bitmap? {
+        return try {
+            val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.absolutePath, boundsOptions)
+            val origW = boundsOptions.outWidth
+            val origH = boundsOptions.outHeight
+            if (origW <= 0 || origH <= 0) return null
+
+            val left = bounds.left.coerceIn(0, origW - 1)
+            val top = bounds.top.coerceIn(0, origH - 1)
+            val right = bounds.right.coerceIn(left + 1, origW)
+            val bottom = bounds.bottom.coerceIn(top + 1, origH)
+            val rect = Rect(left, top, right, bottom)
+
+            val decoder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                BitmapRegionDecoder.newInstance(file.absolutePath)
+            } else {
+                @Suppress("DEPRECATION")
+                BitmapRegionDecoder.newInstance(file.absolutePath, false)
+            }
+
+            val decodeOpts = BitmapFactory.Options().apply {
+                val targetSize = 160
+                val maxDim = maxOf(rect.width(), rect.height())
+                var sample = 1
+                while (maxDim / (sample * 2) >= targetSize) {
+                    sample *= 2
+                }
+                inSampleSize = sample
+            }
+            decoder?.decodeRegion(rect, decodeOpts)
+        } catch (t: Throwable) {
+            null
+        }
     }
 
     /**

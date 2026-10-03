@@ -10,14 +10,17 @@ import dagger.hilt.components.SingletonComponent
 import java.io.File
 import javax.inject.Singleton
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+
 @Module
 @InstallIn(SingletonComponent::class)
 object FaceModule {
 
     @Provides
     @Singleton
-    fun provideFaceDetectionEngine(): FaceDetectionEngine {
-        return FaceDetectionEngine()
+    fun provideFaceDetectionEngine(@ApplicationContext context: Context): FaceDetectionEngine {
+        return FaceDetectionEngine(context)
     }
 
     @Provides
@@ -30,6 +33,6 @@ object FaceModule {
     @Provides
     @Singleton
     fun provideFaceClusterer(): FaceClusterer {
-        return FaceClusterer(threshold = 0.6f)
+        return FaceClusterer(threshold = 0.75f)
     }
 }

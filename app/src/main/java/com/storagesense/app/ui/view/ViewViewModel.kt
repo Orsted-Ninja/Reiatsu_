@@ -44,7 +44,11 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import com.storagesense.app.ai.face.FaceClusterEntity
+import com.storagesense.app.ai.face.FaceClusterer
+import com.storagesense.app.ai.face.FaceDetectionEngine
 import com.storagesense.app.data.local.room.FaceClusterDao
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.Locale
 import javax.inject.Inject
 
@@ -190,7 +194,9 @@ data class ViewUiState(
     val actionResultMessage: String? = null,
     val faceClusters: Map<Int, List<FaceClusterEntity>> = emptyMap(),
     val showPeopleFolder: Boolean = false,
-    val selectedPersonClusterId: Int? = null
+    val selectedPersonClusterId: Int? = null,
+    val isFaceScanning: Boolean = false,
+    val faceScanProgressText: String = ""
 )
 
 @HiltViewModel
@@ -204,7 +210,9 @@ class ViewViewModel @Inject constructor(
     private val storageIndexManager: StorageIndexManager,
     private val actionLogDao: ActionLogDao,
     private val recentFilesHelper: RecentFilesHelper,
-    private val faceClusterDao: FaceClusterDao
+    private val faceClusterDao: FaceClusterDao,
+    private val faceDetectionEngine: FaceDetectionEngine,
+    private val faceClusterer: FaceClusterer
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ViewUiState())
@@ -529,6 +537,70 @@ class ViewViewModel @Inject constructor(
 
     fun openPeopleFolder() {
         _uiState.value = _uiState.value.copy(showPeopleFolder = true, selectedPersonClusterId = null)
+        if (_uiState.value.faceClusters.isEmpty() && !_uiState.value.isFaceScanning) {
+            scanFacesNow()
+        }
+    }
+
+    fun scanFacesNow() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isFaceScanning = true,
+                faceScanProgressText = "Analyzing photos with Google ML Kit..."
+            )
+            withContext(Dispatchers.IO) {
+                var allPhotos = fileRepository.getAllFiles().filter {
+                    it.category == FileCategory.IMAGE_PHOTO || it.category == FileCategory.IMAGE_SCREENSHOT
+                }
+                if (allPhotos.isEmpty()) {
+                    allPhotos = _uiState.value.mediaItems.filter { !it.isVideo }.map { it.toFileItem() }
+                }
+
+                val total = allPhotos.size
+                for ((idx, photo) in allPhotos.withIndex()) {
+                    val file = File(photo.path)
+                    if (file.exists() && file.canRead()) {
+                        if (idx % 3 == 0) {
+                            _uiState.value = _uiState.value.copy(
+                                faceScanProgressText = "Scanning photo ${idx + 1} of $total..."
+                            )
+                        }
+                        val detectedFaces = faceDetectionEngine.detectFacesInFile(file)
+                        for (face in detectedFaces) {
+                            val buffer = ByteBuffer.allocate(face.landmarkEmbedding.size * 4)
+                            buffer.asFloatBuffer().put(face.landmarkEmbedding)
+                            val entity = FaceClusterEntity(
+                                imagePath = file.absolutePath,
+                                faceEmbedding = buffer.array(),
+                                personClusterId = -1
+                            )
+                            faceClusterDao.insertFace(entity)
+                        }
+                    }
+                }
+
+                _uiState.value = _uiState.value.copy(
+                    faceScanProgressText = "Grouping detected faces..."
+                )
+                val unclustered = faceClusterDao.getUnclusteredFaces()
+                if (unclustered.isNotEmpty()) {
+                    val floatEmbeddings = unclustered.map { entity ->
+                        val buffer = ByteBuffer.wrap(entity.faceEmbedding).order(ByteOrder.BIG_ENDIAN).asFloatBuffer()
+                        val array = FloatArray(buffer.capacity())
+                        buffer.get(array)
+                        Pair(entity.id, array)
+                    }
+                    val clusters = faceClusterer.clusterFaces(floatEmbeddings)
+                    for ((clusterId, faceIds) in clusters) {
+                        for (id in faceIds) {
+                            faceClusterDao.updateClusterId(id, clusterId)
+                        }
+                    }
+                }
+            }
+            _uiState.value = _uiState.value.copy(isFaceScanning = false, faceScanProgressText = "")
+            loadData()
+        }
     }
 
     fun selectPersonCluster(clusterId: Int?) {

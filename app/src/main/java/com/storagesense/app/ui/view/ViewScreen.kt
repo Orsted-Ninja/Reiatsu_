@@ -51,9 +51,11 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -412,7 +414,35 @@ fun ViewScreen(
                         }
                     }
 
-                    if (uiState.faceClusters.isEmpty()) {
+                    if (uiState.isFaceScanning) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(
+                                    color = VaultPrimary,
+                                    modifier = Modifier.size(36.dp),
+                                    strokeWidth = 3.dp
+                                )
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Text(
+                                    text = uiState.faceScanProgressText.ifBlank { "Detecting faces with Google ML Kit..." },
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                    color = VaultOnSurface,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Processing locally on your device",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = VaultOutline
+                                )
+                            }
+                        }
+                    } else if (uiState.faceClusters.isEmpty()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -426,13 +456,35 @@ fun ViewScreen(
                                     tint = VaultOutline.copy(alpha = 0.5f),
                                     modifier = Modifier.size(48.dp)
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
                                 Text(
-                                    text = "No grouped faces detected yet.\nRun a scan from Dashboard to group people!",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = VaultOutline,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    text = "No grouped faces found yet",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = VaultOnSurface
                                 )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Google ML Kit will analyze your photos to detect and cluster similar faces.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = VaultOutline,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = 24.dp)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = { viewModel.scanFacesNow() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary),
+                                    shape = RoundedCornerShape(20.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Face,
+                                        contentDescription = null,
+                                        tint = Color.Black,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Scan Photos for Faces", color = Color.Black, fontWeight = FontWeight.SemiBold)
+                                }
                             }
                         }
                     } else if (uiState.selectedPersonClusterId == null) {

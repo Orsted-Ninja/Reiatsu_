@@ -87,6 +87,7 @@ class StorageIndexManager @Inject constructor(
                 // Batch insert into database and retain real database IDs
                 val batchSize = 100
                 val documentsToIndex = mutableListOf<FileItem>()
+                val photosToIndex = mutableListOf<FileItem>()
                 for (chunk in scannedItems.chunked(batchSize)) {
                     val insertedIds = fileRepository.insertAll(chunk)
                     for ((index, item) in chunk.withIndex()) {
@@ -99,6 +100,8 @@ class StorageIndexManager @Inject constructor(
                                 FileCategory.DOCUMENT_TEXT
                             )) {
                             documentsToIndex.add(itemWithId)
+                        } else if (item.category == FileCategory.IMAGE_PHOTO) {
+                            photosToIndex.add(itemWithId)
                         }
                         searchDao.indexDocumentText(
                             fileId = fileId,
@@ -146,6 +149,21 @@ class StorageIndexManager @Inject constructor(
                             message = "Indexing (${idx + 1}/${prioritizedDocs.size}): ${doc.name}"
                         )
                         indexingPipeline.indexFile(doc)
+                    }
+                }
+
+                // Tier 3: Photo face indexing via Google ML Kit
+                if (photosToIndex.isNotEmpty()) {
+                    _progress.value = _progress.value.copy(
+                        message = "Detecting faces in ${photosToIndex.size} photos..."
+                    )
+                    for ((idx, photo) in photosToIndex.withIndex()) {
+                        if (idx % 10 == 0) {
+                            _progress.value = _progress.value.copy(
+                                message = "Detecting faces (${idx + 1}/${photosToIndex.size}): ${photo.name}"
+                            )
+                        }
+                        indexingPipeline.indexFile(photo)
                     }
                 }
 
