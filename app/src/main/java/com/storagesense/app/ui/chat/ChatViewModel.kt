@@ -22,10 +22,12 @@ import com.storagesense.app.indexing.IndexProgress
 import com.storagesense.app.indexing.StorageIndexManager
 import com.storagesense.app.ui.util.RecentFilesHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 
@@ -49,6 +51,13 @@ data class ChatUiState(
     val totalBytes: Long = 256L * 1024L * 1024L * 1024L,
     val segments: List<StorageSegment> = emptyList(),
     val insights: List<StorageInsight> = emptyList()
+)
+
+private data class StorageOverviewData(
+    val usedBytes: Long,
+    val totalBytes: Long,
+    val segments: List<StorageSegment>,
+    val insights: List<StorageInsight>
 )
 
 @HiltViewModel
@@ -405,55 +414,55 @@ class ChatViewModel @Inject constructor(
 
     fun loadStorageOverview() {
         viewModelScope.launch {
-            val stat = try {
-                StatFs(Environment.getDataDirectory().path)
-            } catch (e: Exception) {
-                null
+            val overview = withContext(Dispatchers.Default) {
+                val stat = try {
+                    StatFs(Environment.getDataDirectory().path)
+                } catch (e: Exception) {
+                    null
+                }
+                val totalBytes = stat?.totalBytes ?: (256L * 1024L * 1024L * 1024L)
+                val availableBytes = stat?.availableBytes ?: (128L * 1024L * 1024L * 1024L)
+                val usedBytes = (totalBytes - availableBytes).coerceAtLeast(0L)
+
+                val files = fileRepository.getAllFiles()
+                val photosBytes = files.filter { it.category == FileCategory.IMAGE_PHOTO || it.category == FileCategory.IMAGE_SCREENSHOT }.sumOf { it.sizeBytes }
+                val videosBytes = files.filter { it.category == FileCategory.VIDEO }.sumOf { it.sizeBytes }
+                val docsBytes = files.filter {
+                    it.category == FileCategory.DOCUMENT_PDF ||
+                            it.category == FileCategory.DOCUMENT_WORD ||
+                            it.category == FileCategory.DOCUMENT_SLIDES ||
+                            it.category == FileCategory.DOCUMENT_TEXT
+                }.sumOf { it.sizeBytes }
+
+                val appsEstBytes = (usedBytes * 0.35).toLong()
+                val photosEstBytes = if (photosBytes > 0) photosBytes else (usedBytes * 0.25).toLong()
+                val videosEstBytes = if (videosBytes > 0) videosBytes else (usedBytes * 0.20).toLong()
+                val docsEstBytes = if (docsBytes > 0) docsBytes else (usedBytes * 0.12).toLong()
+                val otherEstBytes = (usedBytes - (appsEstBytes + photosEstBytes + videosEstBytes + docsEstBytes)).coerceAtLeast(1024L * 1024L * 1024L)
+
+                val sum = (appsEstBytes + photosEstBytes + videosEstBytes + docsEstBytes + otherEstBytes).toFloat()
+                val segs = listOf(
+                    StorageSegment("Apps", appsEstBytes, StorageApp, appsEstBytes / sum),
+                    StorageSegment("Photos", photosEstBytes, StoragePhoto, photosEstBytes / sum),
+                    StorageSegment("Videos", videosEstBytes, StorageVideo, videosEstBytes / sum),
+                    StorageSegment("Documents", docsEstBytes, StorageDoc, docsEstBytes / sum),
+                    StorageSegment("Other", otherEstBytes, StorageOther, otherEstBytes / sum)
+                )
+
+                val ins = mutableListOf<StorageInsight>()
+                if (videosEstBytes > 1024L * 1024L * 1024L) {
+                    ins.add(StorageInsight("Videos are using ${formatBytes(videosEstBytes)}", "Videos occupy a major portion of storage."))
+                }
+                ins.add(StorageInsight("Private on-device indexing", "Zero cloud uploads. Everything stays on this device."))
+
+                StorageOverviewData(usedBytes, totalBytes, segs, ins)
             }
-            val totalDeviceBytes = stat?.totalBytes ?: (256L * 1024L * 1024L * 1024L)
-            val availableDeviceBytes = stat?.availableBytes ?: (128L * 1024L * 1024L * 1024L)
-            val usedDeviceBytes = (totalDeviceBytes - availableDeviceBytes).coerceAtLeast(0L)
-
-            // Load indexed file list for category-based size calculations.
-            // Note: getAll() now returns up to 25,000 records — sufficient for all real devices.
-            val files = fileRepository.getAllFiles()
-            val photosBytes = files.filter { it.category == FileCategory.IMAGE_PHOTO || it.category == FileCategory.IMAGE_SCREENSHOT }.sumOf { it.sizeBytes }
-            val videosBytes = files.filter { it.category == FileCategory.VIDEO }.sumOf { it.sizeBytes }
-            val docsBytes = files.filter {
-                it.category == FileCategory.DOCUMENT_PDF ||
-                        it.category == FileCategory.DOCUMENT_WORD ||
-                        it.category == FileCategory.DOCUMENT_SLIDES ||
-                        it.category == FileCategory.DOCUMENT_TEXT
-            }.sumOf { it.sizeBytes }
-
-            // Apps/system: we cannot enumerate /data/app or /system, so estimate.
-            // Real user media is reflected from the indexed files above.
-            val appsEstBytes = (usedDeviceBytes * 0.35).toLong()
-            val photosEstBytes = if (photosBytes > 0) photosBytes else (usedDeviceBytes * 0.25).toLong()
-            val videosEstBytes = if (videosBytes > 0) videosBytes else (usedDeviceBytes * 0.20).toLong()
-            val docsEstBytes = if (docsBytes > 0) docsBytes else (usedDeviceBytes * 0.12).toLong()
-            val otherEstBytes = (usedDeviceBytes - (appsEstBytes + photosEstBytes + videosEstBytes + docsEstBytes)).coerceAtLeast(1024L * 1024L * 1024L)
-
-            val sum = (appsEstBytes + photosEstBytes + videosEstBytes + docsEstBytes + otherEstBytes).toFloat()
-            val segments = listOf(
-                StorageSegment("Apps", appsEstBytes, StorageApp, appsEstBytes / sum),
-                StorageSegment("Photos", photosEstBytes, StoragePhoto, photosEstBytes / sum),
-                StorageSegment("Videos", videosEstBytes, StorageVideo, videosEstBytes / sum),
-                StorageSegment("Documents", docsEstBytes, StorageDoc, docsEstBytes / sum),
-                StorageSegment("Other", otherEstBytes, StorageOther, otherEstBytes / sum)
-            )
-
-            val insights = mutableListOf<StorageInsight>()
-            if (videosEstBytes > 1024L * 1024L * 1024L) {
-                insights.add(StorageInsight("Videos are using ${formatBytes(videosEstBytes)}", "Videos occupy a major portion of storage."))
-            }
-            insights.add(StorageInsight("Private on-device indexing", "Zero cloud uploads. Everything stays on this device."))
 
             _uiState.value = _uiState.value.copy(
-                usedBytes = usedDeviceBytes,
-                totalBytes = totalDeviceBytes,
-                segments = segments,
-                insights = insights
+                usedBytes = overview.usedBytes,
+                totalBytes = overview.totalBytes,
+                segments = overview.segments,
+                insights = overview.insights
             )
         }
     }

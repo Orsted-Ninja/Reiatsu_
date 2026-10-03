@@ -111,8 +111,10 @@ dependencies {
     // ONNX Runtime for Vector Embeddings (MiniLM, MobileCLIP)
     implementation(libs.onnxruntime.android)
 
-    // ML Kit OCR (bundled offline text recognition)
+    // ML Kit OCR & Vision (bundled offline text recognition, face detection, image labeling)
     implementation(libs.mlkit.text.recognition)
+    implementation(libs.mlkit.image.labeling)
+    implementation(libs.mlkit.face.detection)
 
     // Google MediaPipe Tasks GenAI for 100% On-Device Gemma Inference
     implementation(libs.mediapipe.tasks.genai)
@@ -120,6 +122,7 @@ dependencies {
     // Utilities
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     implementation(libs.gson)
 
     // Testing

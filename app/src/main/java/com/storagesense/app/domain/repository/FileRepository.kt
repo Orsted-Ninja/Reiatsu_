@@ -21,4 +21,5 @@ interface FileRepository {
     suspend fun getRecentFiles(sinceEpochMs: Long, limit: Int = 50): List<FileItem>
     suspend fun getFilesByCategory(category: String): List<FileItem>
     suspend fun getFilesByFolderKeyword(folderKeyword: String, category: String? = null, limit: Int = 50): List<FileItem>
+    suspend fun deleteByPathPrefix(prefix: String): Int
 }

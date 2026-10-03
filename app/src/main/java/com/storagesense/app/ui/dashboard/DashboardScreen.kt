@@ -127,24 +127,39 @@ fun DashboardScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        Button(
-                            onClick = { viewModel.triggerScan() },
-                            modifier = Modifier.fillMaxWidth(),
-                            enabled = !uiState.isScanning,
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            if (uiState.isScanning) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    strokeWidth = 2.dp
+                        if (uiState.isScanning) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                                Text(
+                                    text = "Analyzing your files...",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Scanning Device...")
-                            } else {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                val progressVal = if (uiState.indexProgress.totalToIndex > 0) {
+                                    (uiState.indexProgress.indexedCount.toFloat() / uiState.indexProgress.totalToIndex.toFloat()).coerceIn(0f, 1f)
+                                } else 0f
+                                LinearProgressIndicator(
+                                    progress = { progressVal },
+                                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${uiState.indexProgress.indexedCount} of ${uiState.indexProgress.totalToIndex}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.align(Alignment.End)
+                                )
+                            }
+                        } else {
+                            Button(
+                                onClick = { viewModel.triggerScan() },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
                                 Icon(Icons.Default.Refresh, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Scan Storage Now")
+                                Text("Refresh Database")
                             }
                         }
                     }

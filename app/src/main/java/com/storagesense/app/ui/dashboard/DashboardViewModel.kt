@@ -40,6 +40,7 @@ data class DashboardUiState(
     val totalStorageBytes: Long = 0,
     val categories: List<CategoryStat> = emptyList(),
     val isScanning: Boolean = false,
+    val indexProgress: com.storagesense.app.indexing.IndexProgress = com.storagesense.app.indexing.IndexProgress(),
     val recentFiles: List<FileItem> = emptyList(),
     val activeCategoryTitle: String? = null,
     val activeCategoryFiles: List<FileItem> = emptyList(),
@@ -73,7 +74,10 @@ class DashboardViewModel @Inject constructor(
         loadStats()
         viewModelScope.launch {
             storageIndexManager.progress.collect { prog ->
-                _uiState.value = _uiState.value.copy(isScanning = prog.isRunning)
+                _uiState.value = _uiState.value.copy(
+                    isScanning = prog.isRunning,
+                    indexProgress = prog
+                )
                 if (!prog.isRunning) {
                     loadStats()
                 }

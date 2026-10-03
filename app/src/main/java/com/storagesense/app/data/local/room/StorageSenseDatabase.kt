@@ -18,7 +18,7 @@ import com.storagesense.app.data.local.room.entity.ImageIndexEntity
         ImageIndexEntity::class,
         ActionLogEntity::class
     ],
-    version = 1,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

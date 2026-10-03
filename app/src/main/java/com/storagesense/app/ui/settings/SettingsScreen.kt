@@ -23,6 +23,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,6 +47,27 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.storagesense.app.ui.theme.DangerRed
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
+import com.storagesense.app.indexing.IndexedFolder
+import java.io.File
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -53,6 +75,17 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showAddFolderDialog by remember { mutableStateOf(false) }
+
+    if (showAddFolderDialog) {
+        AddFolderDialog(
+            suggestedFolders = uiState.suggestedFolders,
+            onDismiss = { showAddFolderDialog = false },
+            onAdd = { path, name ->
+                viewModel.addCustomFolder(path, name)
+            }
+        )
+    }
 
     LaunchedEffect(uiState.actionMessage) {
         uiState.actionMessage?.let {
@@ -171,6 +204,72 @@ fun SettingsScreen(
                 }
             }
 
+            // Indexed Folders & Scope Management
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Folder,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Indexed Folders & Scope",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
+                            Text(
+                                text = "${uiState.folders.count { it.isEnabled }} of ${uiState.folders.size} active",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Control which storage folders StorageSense accesses. Disabling large app media folders (like WhatsApp) prevents indexing 10,000+ unnecessary files and keeps your device smooth.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            uiState.folders.forEach { folder ->
+                                FolderConfigRow(
+                                    folder = folder,
+                                    onToggle = { isChecked -> viewModel.toggleFolder(folder, isChecked) },
+                                    onDelete = { viewModel.removeCustomFolder(folder) }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        OutlinedButton(
+                            onClick = { showAddFolderDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Add Additional Folder")
+                        }
+                    }
+                }
+            }
+
             // Storage Indexer Actions
             item {
                 Card(
@@ -184,35 +283,46 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Currently indexed: ${uiState.totalFilesIndexed} files across Documents, Downloads, DCIM, and Pictures.",
+                            text = "Currently indexed: ${uiState.totalFilesIndexed} files across your active storage folders.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
                         if (uiState.indexProgress.isRunning) {
                             Spacer(modifier = Modifier.height(10.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.fillMaxWidth()) {
                                 Text(
-                                    text = uiState.indexProgress.message,
-                                    style = MaterialTheme.typography.labelSmall,
+                                    text = "Analyzing your files...",
+                                    style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.primary
                                 )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                val progressVal = if (uiState.indexProgress.totalToIndex > 0) {
+                                    (uiState.indexProgress.indexedCount.toFloat() / uiState.indexProgress.totalToIndex.toFloat()).coerceIn(0f, 1f)
+                                } else 0f
+                                LinearProgressIndicator(
+                                    progress = { progressVal },
+                                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${uiState.indexProgress.indexedCount} of ${uiState.indexProgress.totalToIndex}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.align(Alignment.End)
+                                )
                             }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        OutlinedButton(
-                            onClick = { viewModel.triggerRescan() },
-                            enabled = !uiState.indexProgress.isRunning,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (uiState.indexProgress.isRunning) "Indexing in progress..." else "Re-scan Storage Now")
+                        } else {
+                            OutlinedButton(
+                                onClick = { viewModel.triggerRescan() },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Re-scan Storage Now")
+                            }
                         }
                     }
                 }
@@ -357,4 +467,255 @@ fun EngineStatusRow(name: String, details: String) {
             modifier = Modifier.size(18.dp)
         )
     }
+}
+
+@Composable
+fun FolderConfigRow(
+    folder: IndexedFolder,
+    onToggle: (Boolean) -> Unit,
+    onDelete: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = folder.displayName,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                    if (!folder.isDefault) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                text = "Custom",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = folder.path,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (folder.description.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = folder.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (!folder.isDefault) {
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Remove",
+                            tint = DangerRed,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+                Switch(
+                    checked = folder.isEnabled,
+                    onCheckedChange = onToggle,
+                    modifier = Modifier.scale(0.85f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AddFolderDialog(
+    suggestedFolders: List<String>,
+    onDismiss: () -> Unit,
+    onAdd: (path: String, name: String) -> Unit
+) {
+    var pathInput by remember { mutableStateOf("") }
+    var nameInput by remember { mutableStateOf("") }
+
+    val treeLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val resolved = resolveTreeUriToPath(uri)
+            if (resolved != null) {
+                pathInput = resolved
+                if (nameInput.isBlank()) {
+                    nameInput = File(resolved).name
+                }
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Add Storage Folder",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Select a folder to include in search and AI indexing:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (suggestedFolders.isNotEmpty()) {
+                    Text(
+                        text = "Quick Add Detected Folders:",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        suggestedFolders.take(5).forEach { suggestedPath ->
+                            val folderName = File(suggestedPath).name
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        pathInput = suggestedPath
+                                        nameInput = folderName
+                                    },
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column {
+                                        Text(
+                                            text = folderName,
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
+                                        )
+                                        Text(
+                                            text = suggestedPath,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    HorizontalDivider()
+                }
+
+                OutlinedTextField(
+                    value = pathInput,
+                    onValueChange = { pathInput = it },
+                    label = { Text("Folder Path") },
+                    placeholder = { Text("/storage/emulated/0/...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodySmall
+                )
+
+                OutlinedTextField(
+                    value = nameInput,
+                    onValueChange = { nameInput = it },
+                    label = { Text("Display Name (Optional)") },
+                    placeholder = { Text("e.g. My Folder") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodySmall
+                )
+
+                OutlinedButton(
+                    onClick = { treeLauncher.launch(null) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Browse Folders (System Picker)")
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (pathInput.isNotBlank()) {
+                        onAdd(pathInput.trim(), nameInput.trim())
+                        onDismiss()
+                    }
+                },
+                enabled = pathInput.isNotBlank()
+            ) {
+                Text("Add Folder")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+private fun resolveTreeUriToPath(uri: Uri): String? {
+    try {
+        val docId = android.provider.DocumentsContract.getTreeDocumentId(uri)
+        if (docId != null) {
+            val parts = docId.split(":")
+            if (parts.size >= 2) {
+                val base = if (parts[0].equals("primary", ignoreCase = true)) {
+                    android.os.Environment.getExternalStorageDirectory().absolutePath
+                } else {
+                    "/storage/${parts[0]}"
+                }
+                return if (parts[1].isBlank()) base else "$base/${parts[1]}"
+            }
+        }
+    } catch (e: Exception) {
+        // Fallback
+    }
+    return uri.path
 }

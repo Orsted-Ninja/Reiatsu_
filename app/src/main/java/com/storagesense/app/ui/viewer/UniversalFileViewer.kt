@@ -646,6 +646,7 @@ private fun ImageViewerContent(file: FileItem) {
             model = ImageRequest.Builder(LocalContext.current)
                 .data(if (file.path.startsWith("content://")) Uri.parse(file.path) else realFile)
                 .crossfade(true)
+                .size(1920) // Limit max dimension to 1920px to prevent Canvas 'too large' crash
                 .build(),
             contentDescription = file.name,
             contentScale = ContentScale.Fit,

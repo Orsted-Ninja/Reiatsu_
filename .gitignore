@@ -18,3 +18,5 @@ stitch_design/
 *.png
 !docs/assets/logo.png
 pc_port/
+*.db
+*.diff

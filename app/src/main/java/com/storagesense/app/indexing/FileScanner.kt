@@ -17,7 +17,8 @@ import javax.inject.Singleton
 
 @Singleton
 class FileScanner @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val folderConfigManager: FolderConfigManager
 ) {
 
     companion object {
@@ -26,25 +27,48 @@ class FileScanner @Inject constructor(
     }
 
     /**
-     * Scans all external storage directories and MediaStore to discover 100% of user files.
-     * High performance: Does not compute SHA-256 during initial discovery to prevent freezing on large files.
+     * Scans configured external storage directories and MediaStore to discover user files.
+     * High performance: Only scans enabled folders, skipping disabled ones like WhatsApp to prevent lag.
      */
     suspend fun scanDirectories(
-        roots: List<File> = getDefaultScanRoots(),
+        roots: List<File>? = null,
         onFileFound: (suspend (FileItem) -> Unit)? = null
     ): List<FileItem> = withContext(Dispatchers.IO) {
         val foundMap = LinkedHashMap<String, FileItem>()
+        val effectiveRoots = roots ?: folderConfigManager.getEnabledRoots()
 
-        // 1. Recursive Filesystem Scan across external storage roots (including Android/media)
-        for (root in roots) {
+        // 1. Scan shallow files directly sitting in external storage root (non-recursive)
+        try {
+            val external = Environment.getExternalStorageDirectory()
+            if (external != null && external.exists() && external.canRead()) {
+                val looseFiles = external.listFiles { file ->
+                    file.isFile && file.length() > 0 && !file.name.startsWith(".")
+                } ?: emptyArray()
+                for (file in looseFiles) {
+                    if (folderConfigManager.isPathAllowed(file.absolutePath)) {
+                        val item = createFileItem(file)
+                        foundMap[item.path] = item
+                        onFileFound?.invoke(item)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Handled
+        }
+
+        // 2. Recursive Filesystem Scan across configured enabled roots
+        for (root in effectiveRoots) {
             if (!root.exists() || !root.canRead()) continue
             scanRecursive(root, foundMap, onFileFound)
         }
 
-        // 2. MediaStore Provider Scan to guarantee complete coverage of media, downloads, and docs
+        // 3. MediaStore Provider Scan filtered by user-enabled folder scope
         try {
             val mediaStoreItems = scanMediaStore()
             for (item in mediaStoreItems) {
+                if (!folderConfigManager.isPathAllowed(item.path)) {
+                    continue
+                }
                 if (!foundMap.containsKey(item.path)) {
                     foundMap[item.path] = item
                     onFileFound?.invoke(item)
@@ -63,6 +87,8 @@ class FileScanner @Inject constructor(
         onFileFound: (suspend (FileItem) -> Unit)?
     ) {
         val entries = directory.listFiles() ?: return
+        val disabledPaths = folderConfigManager.getDisabledPaths()
+
         for (entry in entries) {
             val name = entry.name
 
@@ -82,11 +108,19 @@ class FileScanner @Inject constructor(
                     continue
                 }
 
+                // Skip any disabled folder branch
+                val normDir = absPath.trimEnd('/')
+                if (disabledPaths.any { normDir.equals(it, ignoreCase = true) || normDir.startsWith("$it/", ignoreCase = true) }) {
+                    continue
+                }
+
                 scanRecursive(entry, results, onFileFound)
             } else if (entry.isFile && entry.length() > 0) {
-                val item = createFileItem(entry)
-                results[item.path] = item
-                onFileFound?.invoke(item)
+                if (folderConfigManager.isPathAllowed(entry.absolutePath)) {
+                    val item = createFileItem(entry)
+                    results[item.path] = item
+                    onFileFound?.invoke(item)
+                }
             }
         }
     }
@@ -254,16 +288,7 @@ class FileScanner @Inject constructor(
     }
 
     fun getDefaultScanRoots(): List<File> {
-        val roots = mutableListOf<File>()
-        try {
-            val external = Environment.getExternalStorageDirectory()
-            if (external != null && external.exists()) {
-                roots.add(external)
-            }
-        } catch (e: Exception) {
-            // Handled
-        }
-        return roots
+        return folderConfigManager.getEnabledRoots()
     }
 }
 

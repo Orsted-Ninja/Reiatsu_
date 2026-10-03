@@ -599,8 +599,10 @@ fun ChatScreen(
 
     // Engine & Settings Sheet
     if (showSettingsSheet) {
+        val settingsSheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
             onDismissRequest = { showSettingsSheet = false },
+            sheetState = settingsSheetState,
             containerColor = VaultBackground
         ) {
             SettingsScreen()

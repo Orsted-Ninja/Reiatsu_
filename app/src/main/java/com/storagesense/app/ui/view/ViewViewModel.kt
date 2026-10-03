@@ -765,7 +765,7 @@ class ViewViewModel @Inject constructor(
         return memories
     }
 
-    private suspend fun processFiles(files: List<FileItem>) {
+    private suspend fun processFiles(files: List<FileItem>) = withContext(Dispatchers.Default) {
         val stat = try {
             StatFs(Environment.getDataDirectory().path)
         } catch (e: Exception) {

@@ -55,9 +55,9 @@ if %ERRORLEVEL% NEQ 0 (
 echo.
 
 :: 3. Install APK via ADB
-set "APK_PATH=%USERPROFILE%\.gradle-ascent-build\app\outputs\apk\debug\app-debug.apk"
+set "APK_PATH=%~dp0app\build\outputs\apk\debug\app-debug.apk"
 if not exist "%APK_PATH%" (
-    set "APK_PATH=%~dp0app\build\outputs\apk\debug\app-debug.apk"
+    set "APK_PATH=%USERPROFILE%\.gradle-ascent-build\app\outputs\apk\debug\app-debug.apk"
 )
 if not exist "%APK_PATH%" (
     echo [ERROR] APK not found at: %APK_PATH%
@@ -66,6 +66,7 @@ if not exist "%APK_PATH%" (
 )
 
 echo [3/5] Installing StorageSense APK onto !DEVICE_ID!...
+"%ADB_CMD%" -s !DEVICE_ID! shell am force-stop com.storagesense.app.debug
 "%ADB_CMD%" -s !DEVICE_ID! install -r -d "%APK_PATH%"
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] ADB installation failed!
