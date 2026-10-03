@@ -31,7 +31,7 @@ MODELS = {
     "4": {
         "name": "mobilefacenet.onnx (ONNX Face Recognition embedding model, ~5 MB)",
         "filename": "mobilefacenet.onnx",
-        "url": "https://github.com/sirius-ai/MobileFaceNet_TF/raw/master/arch/mobilefacenet.onnx"
+        "url": "https://huggingface.co/Abhishek12233/face-embedding-mobilefacenet-onnx/resolve/main/mobilefacenet.onnx"
     }
 }
 

@@ -129,25 +129,24 @@ class IndexingPipeline @Inject constructor(
             clipEmbedding = clipVec
         )
 
-        // Face Grouping hook
+        // Face Grouping hook via Google ML Kit
         try {
             val bitmap = BitmapFactory.decodeFile(file.absolutePath)
             if (bitmap != null) {
-                val faces = faceDetectionEngine.detectFaces(bitmap)
-                for (faceBmp in faces) {
-                    val embedding = faceEmbeddingEngine.getEmbedding(faceBmp)
-                    if (embedding != null) {
-                        // Store as ByteArray for Room
-                        val buffer = java.nio.ByteBuffer.allocate(embedding.size * 4)
-                        buffer.asFloatBuffer().put(embedding)
-                        
-                        val entity = FaceClusterEntity(
-                            imagePath = file.absolutePath,
-                            faceEmbedding = buffer.array(),
-                            personClusterId = -1 // Unclustered
-                        )
-                        faceClusterDao.insertFace(entity)
-                    }
+                val detectedFaces = faceDetectionEngine.detectFacesWithFeatures(bitmap)
+                for (face in detectedFaces) {
+                    // Try ONNX embedding if present, else fallback directly to Google ML Kit geometric embedding
+                    val embedding = faceEmbeddingEngine.getEmbedding(face.cropBitmap) ?: face.landmarkEmbedding
+
+                    val buffer = java.nio.ByteBuffer.allocate(embedding.size * 4)
+                    buffer.asFloatBuffer().put(embedding)
+                    
+                    val entity = FaceClusterEntity(
+                        imagePath = file.absolutePath,
+                        faceEmbedding = buffer.array(),
+                        personClusterId = -1 // Unclustered
+                    )
+                    faceClusterDao.insertFace(entity)
                 }
             }
         } catch (e: Exception) {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -26,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Archive
@@ -36,7 +38,10 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.rememberAsyncImagePainter
 import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Movie
@@ -359,138 +364,380 @@ fun ViewScreen(
                     .fillMaxHeight(0.88f)
                     .padding(horizontal = 16.dp)
             ) {
-                // Header Row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = uiState.activeDrillDownTitle ?: "",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp
-                            ),
-                            color = VaultOnSurface
-                        )
-                        val totalBytes = uiState.activeDrillDownFiles.sumOf { it.sizeBytes }
-                        Text(
-                            text = "${uiState.activeDrillDownFiles.size} items • ${formatBytesHelper(totalBytes)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = VaultPrimary
-                        )
-                    }
+                val isImages = uiState.activeDrillDownTitle?.contains("Images", ignoreCase = true) == true ||
+                        uiState.activeDrillDownTitle?.contains("Photos", ignoreCase = true) == true
 
-                    if (isTrash && uiState.activeDrillDownFiles.isNotEmpty()) {
-                        OutlinedButton(
-                            onClick = { viewModel.emptyTrash() },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
-                            border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.6f)),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(20.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.DeleteForever,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = DangerRed
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Empty Trash", fontSize = 11.sp, color = DangerRed)
-                        }
-                    }
-                }
-
-                // Sort Filter Chips Row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = uiState.currentSortOption == SortOption.SIZE_DESC,
-                        onClick = { viewModel.setSortOption(SortOption.SIZE_DESC) },
-                        label = { Text("Size ↓", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = VaultPrimary.copy(alpha = 0.2f),
-                            selectedLabelColor = VaultPrimary,
-                            containerColor = VaultSurfaceContainerLow,
-                            labelColor = VaultOnSurfaceVariant
-                        )
-                    )
-                    FilterChip(
-                        selected = uiState.currentSortOption == SortOption.DATE_DESC,
-                        onClick = { viewModel.setSortOption(SortOption.DATE_DESC) },
-                        label = { Text("Date ↓", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = VaultPrimary.copy(alpha = 0.2f),
-                            selectedLabelColor = VaultPrimary,
-                            containerColor = VaultSurfaceContainerLow,
-                            labelColor = VaultOnSurfaceVariant
-                        )
-                    )
-                    FilterChip(
-                        selected = uiState.currentSortOption == SortOption.NAME_ASC,
-                        onClick = { viewModel.setSortOption(SortOption.NAME_ASC) },
-                        label = { Text("Name A-Z", fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = VaultPrimary.copy(alpha = 0.2f),
-                            selectedLabelColor = VaultPrimary,
-                            containerColor = VaultSurfaceContainerLow,
-                            labelColor = VaultOnSurfaceVariant
-                        )
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // File List or Empty State
-                if (uiState.activeDrillDownFiles.isEmpty()) {
-                    Box(
+                if (uiState.showPeopleFolder) {
+                    // People Folder View inside Images Panel
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
+                            .padding(bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = { viewModel.closePeopleFolder() },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(VaultSurfaceContainerHigh)
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.Folder,
-                                contentDescription = null,
-                                tint = VaultOutline.copy(alpha = 0.5f),
-                                modifier = Modifier.size(48.dp)
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = VaultPrimary,
+                                modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
                             Text(
-                                text = if (isTrash) "Trash is empty" else "No files found in this category",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = VaultOutline
+                                text = if (uiState.selectedPersonClusterId == null) "People & Faces" else "Person ${uiState.selectedPersonClusterId}",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                ),
+                                color = VaultOnSurface
                             )
+                            val subText = if (uiState.selectedPersonClusterId == null) {
+                                "${uiState.faceClusters.size} detected individuals"
+                            } else {
+                                "${uiState.faceClusters[uiState.selectedPersonClusterId]?.size ?: 0} photos"
+                            }
+                            Text(
+                                text = subText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = VaultPrimary
+                            )
+                        }
+                    }
+
+                    if (uiState.faceClusters.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.Face,
+                                    contentDescription = null,
+                                    tint = VaultOutline.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "No grouped faces detected yet.\nRun a scan from Dashboard to group people!",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = VaultOutline,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        }
+                    } else if (uiState.selectedPersonClusterId == null) {
+                        // Grid of all People folders
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(3),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentPadding = PaddingValues(bottom = 28.dp)
+                        ) {
+                            items(uiState.faceClusters.keys.toList()) { clusterId ->
+                                val faces = uiState.faceClusters[clusterId] ?: emptyList()
+                                val coverPath = faces.firstOrNull()?.imagePath
+                                Card(
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = VaultSurfaceContainerLow),
+                                    border = BorderStroke(1.dp, VaultOutlineVariant.copy(alpha = 0.4f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { viewModel.selectPersonCluster(clusterId) }
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.padding(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(76.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(VaultSurfaceContainerHigh),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (coverPath != null) {
+                                                androidx.compose.foundation.Image(
+                                                    painter = rememberAsyncImagePainter(java.io.File(coverPath)),
+                                                    contentDescription = "Person $clusterId",
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            } else {
+                                                Icon(
+                                                    imageVector = Icons.Default.Face,
+                                                    contentDescription = null,
+                                                    tint = VaultPrimary
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = "Person $clusterId",
+                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = VaultOnSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "${faces.size} photos",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                            color = VaultOutline
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Photos belonging to the selected person
+                        val faces = uiState.faceClusters[uiState.selectedPersonClusterId] ?: emptyList()
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(3),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentPadding = PaddingValues(bottom = 28.dp)
+                        ) {
+                            items(faces) { face ->
+                                val f = java.io.File(face.imagePath)
+                                Card(
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = CardDefaults.cardColors(containerColor = VaultSurfaceContainerLow),
+                                    modifier = Modifier
+                                        .aspectRatio(1f)
+                                        .clickable {
+                                            if (f.exists()) {
+                                                val fileItem = FileItem(
+                                                    id = f.hashCode().toLong(),
+                                                    path = f.absolutePath,
+                                                    name = f.name,
+                                                    extension = f.extension,
+                                                    sizeBytes = f.length(),
+                                                    lastModifiedEpochMs = f.lastModified(),
+                                                    sha256Hash = "",
+                                                    category = FileCategory.IMAGE_PHOTO,
+                                                    isImportant = false
+                                                )
+                                                previewingFile = fileItem
+                                                viewModel.recordFileOpened(fileItem)
+                                            }
+                                        }
+                                ) {
+                                    androidx.compose.foundation.Image(
+                                        painter = rememberAsyncImagePainter(f),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            }
                         }
                     }
                 } else {
-                    LazyColumn(
+                    // Standard Category File List with People Subfolder Card if viewing Photos
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(bottom = 28.dp)
+                            .padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        items(uiState.activeDrillDownFiles, key = { it.path }) { file ->
-                            DrillDownFileCard(
-                                file = file,
-                                isTrash = isTrash,
-                                onOpen = {
-                                    previewingFile = file
-                                    viewModel.recordFileOpened(file)
-                                },
-                                onDelete = { viewModel.deleteFile(file) },
-                                onRestore = { viewModel.restoreTrashFile(file) },
-                                onPermanentDelete = { viewModel.permanentlyDeleteTrashFile(file) }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = uiState.activeDrillDownTitle ?: "",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                ),
+                                color = VaultOnSurface
                             )
+                            val totalBytes = uiState.activeDrillDownFiles.sumOf { it.sizeBytes }
+                            Text(
+                                text = "${uiState.activeDrillDownFiles.size} items • ${formatBytesHelper(totalBytes)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = VaultPrimary
+                            )
+                        }
+
+                        if (isTrash && uiState.activeDrillDownFiles.isNotEmpty()) {
+                            OutlinedButton(
+                                onClick = { viewModel.emptyTrash() },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
+                                border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.6f)),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteForever,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = DangerRed
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Empty Trash", fontSize = 11.sp, color = DangerRed)
+                            }
+                        }
+                    }
+
+                    // Sort Filter Chips Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = uiState.currentSortOption == SortOption.SIZE_DESC,
+                            onClick = { viewModel.setSortOption(SortOption.SIZE_DESC) },
+                            label = { Text("Size ↓", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = VaultPrimary.copy(alpha = 0.2f),
+                                selectedLabelColor = VaultPrimary,
+                                containerColor = VaultSurfaceContainerLow,
+                                labelColor = VaultOnSurfaceVariant
+                            )
+                        )
+                        FilterChip(
+                            selected = uiState.currentSortOption == SortOption.DATE_DESC,
+                            onClick = { viewModel.setSortOption(SortOption.DATE_DESC) },
+                            label = { Text("Date ↓", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = VaultPrimary.copy(alpha = 0.2f),
+                                selectedLabelColor = VaultPrimary,
+                                containerColor = VaultSurfaceContainerLow,
+                                labelColor = VaultOnSurfaceVariant
+                            )
+                        )
+                        FilterChip(
+                            selected = uiState.currentSortOption == SortOption.NAME_ASC,
+                            onClick = { viewModel.setSortOption(SortOption.NAME_ASC) },
+                            label = { Text("Name A-Z", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = VaultPrimary.copy(alpha = 0.2f),
+                                selectedLabelColor = VaultPrimary,
+                                containerColor = VaultSurfaceContainerLow,
+                                labelColor = VaultOnSurfaceVariant
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // People Subfolder Card (inside Images & Photos panel)
+                    if (isImages) {
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = VaultSurfaceContainerLow),
+                            border = BorderStroke(1.dp, VaultOutlineVariant.copy(alpha = 0.45f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.openPeopleFolder() }
+                                .padding(bottom = 10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(VaultPrimary.copy(alpha = 0.14f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Face,
+                                            contentDescription = null,
+                                            tint = VaultPrimary,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "People",
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = VaultOnSurface
+                                        )
+                                        Text(
+                                            text = if (uiState.faceClusters.isNotEmpty()) "${uiState.faceClusters.size} detected people groups" else "Google ML Kit facial groups",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = VaultOnSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.ChevronRight,
+                                    contentDescription = null,
+                                    tint = VaultOutline,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // File List or Empty State
+                    if (uiState.activeDrillDownFiles.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = Icons.Default.Folder,
+                                    contentDescription = null,
+                                    tint = VaultOutline.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = if (isTrash) "Trash is empty" else "No files found in this category",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = VaultOutline
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = PaddingValues(bottom = 28.dp)
+                        ) {
+                            items(uiState.activeDrillDownFiles, key = { it.path }) { file ->
+                                DrillDownFileCard(
+                                    file = file,
+                                    isTrash = isTrash,
+                                    onOpen = {
+                                        previewingFile = file
+                                        viewModel.recordFileOpened(file)
+                                    },
+                                    onDelete = { viewModel.deleteFile(file) },
+                                    onRestore = { viewModel.restoreTrashFile(file) },
+                                    onPermanentDelete = { viewModel.permanentlyDeleteTrashFile(file) }
+                                )
+                            }
                         }
                     }
                 }

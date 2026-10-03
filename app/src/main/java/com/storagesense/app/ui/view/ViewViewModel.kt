@@ -43,6 +43,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
+import com.storagesense.app.ai.face.FaceClusterEntity
+import com.storagesense.app.data.local.room.FaceClusterDao
 import java.util.Locale
 import javax.inject.Inject
 
@@ -185,7 +187,10 @@ data class ViewUiState(
     val reclaimableTotalBytes: Long = 0L,
     val reclaimableCategories: List<ReclaimableCategory> = emptyList(),
     val pendingActionProposal: ActionProposal? = null,
-    val actionResultMessage: String? = null
+    val actionResultMessage: String? = null,
+    val faceClusters: Map<Int, List<FaceClusterEntity>> = emptyMap(),
+    val showPeopleFolder: Boolean = false,
+    val selectedPersonClusterId: Int? = null
 )
 
 @HiltViewModel
@@ -198,7 +203,8 @@ class ViewViewModel @Inject constructor(
     private val safeFileOps: SafeFileOps,
     private val storageIndexManager: StorageIndexManager,
     private val actionLogDao: ActionLogDao,
-    private val recentFilesHelper: RecentFilesHelper
+    private val recentFilesHelper: RecentFilesHelper,
+    private val faceClusterDao: FaceClusterDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ViewUiState())
@@ -226,9 +232,20 @@ class ViewViewModel @Inject constructor(
                 queryDeviceMedia(dbFiles)
             }
             val memories = buildSpotlightMemories(media)
+
+            val clusterIds = faceClusterDao.getAllPersonClusterIds()
+            val clusterMap = mutableMapOf<Int, List<FaceClusterEntity>>()
+            for (id in clusterIds) {
+                val faces = faceClusterDao.getFacesForPerson(id)
+                if (faces.isNotEmpty()) {
+                    clusterMap[id] = faces
+                }
+            }
+
             _uiState.value = _uiState.value.copy(
                 mediaItems = media,
-                spotlightMemories = memories
+                spotlightMemories = memories,
+                faceClusters = clusterMap
             )
         }
     }
@@ -504,8 +521,26 @@ class ViewViewModel @Inject constructor(
     fun closeDrillDown() {
         _uiState.value = _uiState.value.copy(
             activeDrillDownTitle = null,
-            activeDrillDownFiles = emptyList()
+            activeDrillDownFiles = emptyList(),
+            showPeopleFolder = false,
+            selectedPersonClusterId = null
         )
+    }
+
+    fun openPeopleFolder() {
+        _uiState.value = _uiState.value.copy(showPeopleFolder = true, selectedPersonClusterId = null)
+    }
+
+    fun selectPersonCluster(clusterId: Int?) {
+        _uiState.value = _uiState.value.copy(selectedPersonClusterId = clusterId)
+    }
+
+    fun closePeopleFolder() {
+        if (_uiState.value.selectedPersonClusterId != null) {
+            _uiState.value = _uiState.value.copy(selectedPersonClusterId = null)
+        } else {
+            _uiState.value = _uiState.value.copy(showPeopleFolder = false)
+        }
     }
 
     fun deleteFile(file: FileItem) {
