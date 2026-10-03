@@ -19,6 +19,7 @@ pdfbox = "2.0.27.0"
 onnxruntime = "1.18.0"
 mlkitText = "16.0.1"
 mlkitFace = "16.1.6"
+mlkitImageLabeling = "17.0.8"
 mediapipeGenai = "0.10.35"
 media3 = "1.4.1"
 coroutines = "1.8.1"
@@ -72,6 +73,7 @@ androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.re
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
 mlkit-face-detection = { group = "com.google.mlkit", name = "face-detection", version.ref = "mlkitFace" }
+mlkit-image-labeling = { group = "com.google.mlkit", name = "image-labeling", version.ref = "mlkitImageLabeling" }
 mediapipe-tasks-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipeGenai" }
 
 # Coroutines & JSON

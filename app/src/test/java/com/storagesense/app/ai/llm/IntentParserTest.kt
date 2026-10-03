@@ -12,7 +12,7 @@ class IntentParserTest {
     private val parser = IntentParser(Gson())
 
     @Test
-    fun testParseCleanupQuery() {
+    fun testParseCleanupQuery() = kotlinx.coroutines.runBlocking {
         val intent = parser.parse("Free up 5 GB without deleting important")
         assertTrue(intent is StorageIntent.Cleanup)
         val cleanup = intent as StorageIntent.Cleanup
@@ -21,7 +21,7 @@ class IntentParserTest {
     }
 
     @Test
-    fun testParseDuplicateQuery() {
+    fun testParseDuplicateQuery() = kotlinx.coroutines.runBlocking {
         val intent = parser.parse("Remove duplicate assignments, keep latest")
         assertTrue(intent is StorageIntent.Deduplicate)
         val dedup = intent as StorageIntent.Deduplicate
@@ -29,7 +29,7 @@ class IntentParserTest {
     }
 
     @Test
-    fun testParseSearchQuery() {
+    fun testParseSearchQuery() = kotlinx.coroutines.runBlocking {
         val intent = parser.parse("Find all my DBMS notes")
         assertTrue(intent is StorageIntent.Search)
         val search = intent as StorageIntent.Search
@@ -37,7 +37,7 @@ class IntentParserTest {
     }
 
     @Test
-    fun testParseJsonLlmOutput() {
+    fun testParseJsonLlmOutput() = kotlinx.coroutines.runBlocking {
         val json = """{"action": "SEARCH", "query": "Kubernetes configuration", "is_image": false}"""
         val intent = parser.parse(json)
         assertTrue(intent is StorageIntent.Search)

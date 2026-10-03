@@ -56,12 +56,14 @@ class MainActivity : ComponentActivity() {
 
     private val chatViewModel: ChatViewModel by viewModels()
     private val viewViewModel: ViewViewModel by viewModels()
+    private val imagesViewModel: com.storagesense.app.ui.images.ImagesViewModel by viewModels()
     private val searchViewModel: SearchViewModel by viewModels()
 
     private val mediaPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
         viewViewModel.loadData()
+        imagesViewModel.loadImages()
         chatViewModel.triggerScan()
     }
 
@@ -76,6 +78,7 @@ class MainActivity : ComponentActivity() {
                 MainAppContent(
                     chatViewModel = chatViewModel,
                     viewViewModel = viewViewModel,
+                    imagesViewModel = imagesViewModel,
                     searchViewModel = searchViewModel
                 )
             }
@@ -135,6 +138,7 @@ class MainActivity : ComponentActivity() {
 fun MainAppContent(
     chatViewModel: ChatViewModel,
     viewViewModel: ViewViewModel,
+    imagesViewModel: com.storagesense.app.ui.images.ImagesViewModel,
     searchViewModel: SearchViewModel
 ) {
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Chat) }
@@ -142,6 +146,7 @@ fun MainAppContent(
     val screens = listOf(
         Screen.Chat,
         Screen.View,
+        Screen.Images,
         Screen.Search
     )
 
@@ -213,6 +218,7 @@ fun MainAppContent(
                 when (screen) {
                     is Screen.Chat -> ChatScreen(viewModel = chatViewModel)
                     is Screen.View -> ViewScreen(viewModel = viewViewModel)
+                    is Screen.Images -> com.storagesense.app.ui.images.ImagesScreen(viewModel = imagesViewModel)
                     is Screen.Search -> SearchScreen(viewModel = searchViewModel)
                 }
             }

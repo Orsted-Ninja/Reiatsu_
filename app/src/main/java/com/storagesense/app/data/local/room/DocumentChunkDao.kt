@@ -25,4 +25,7 @@ interface DocumentChunkDao {
 
     @Query("SELECT COUNT(*) FROM document_chunks")
     suspend fun getTotalChunkCount(): Int
+
+    @Query("SELECT DISTINCT fileId FROM document_chunks")
+    suspend fun getChunkedFileIds(): List<Long>
 }

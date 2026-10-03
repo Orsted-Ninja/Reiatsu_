@@ -427,7 +427,8 @@ fun ChatScreen(
                                     onFileClick = { file -> selectedFileForDetail = file },
                                     onActionProposalClick = { proposal -> viewModel.onConfirmAction(proposal) },
                                     onDeleteFile = { file -> viewModel.requestDeleteFile(file) },
-                                    onOpenInApp = { file -> previewingFile = file }
+                                    onOpenInApp = { file -> previewingFile = file },
+                                    onSummarizeFile = { file -> viewModel.summarizeFile(file) }
                                 )
                             }
 
@@ -638,7 +639,8 @@ fun VaultChatMessageItem(
     onFileClick: (FileItem) -> Unit,
     onActionProposalClick: (ActionProposal) -> Unit,
     onDeleteFile: ((FileItem) -> Unit)? = null,
-    onOpenInApp: ((FileItem) -> Unit)? = null
+    onOpenInApp: ((FileItem) -> Unit)? = null,
+    onSummarizeFile: ((FileItem) -> Unit)? = null
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val isUser = message.sender == MessageSender.USER
@@ -763,7 +765,8 @@ fun VaultChatMessageItem(
                                                 com.storagesense.app.ui.util.FileActionHelper.openFile(context, file)
                                             }
                                         },
-                                        onDelete = onDeleteFile
+                                        onDelete = onDeleteFile,
+                                        onSummarize = onSummarizeFile
                                     )
                                 }
                             }

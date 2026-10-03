@@ -111,10 +111,9 @@ dependencies {
     // ONNX Runtime for Vector Embeddings (MiniLM, MobileCLIP)
     implementation(libs.onnxruntime.android)
 
-    // ML Kit OCR (bundled offline text recognition)
+    // ML Kit OCR & Vision (bundled offline text recognition, face detection, image labeling)
     implementation(libs.mlkit.text.recognition)
-    
-    // ML Kit Face Detection
+    implementation(libs.mlkit.image.labeling)
     implementation(libs.mlkit.face.detection)
 
     // Google MediaPipe Tasks GenAI for 100% On-Device Gemma Inference

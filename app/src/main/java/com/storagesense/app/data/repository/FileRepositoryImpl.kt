@@ -104,4 +104,8 @@ class FileRepositoryImpl @Inject constructor(
         }
         return entities.map { it.toDomain() }
     }
+
+    override suspend fun deleteByPathPrefix(prefix: String): Int {
+        return dao.deleteByPathPrefix(prefix)
+    }
 }

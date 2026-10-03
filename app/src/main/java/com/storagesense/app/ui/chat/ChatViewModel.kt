@@ -96,11 +96,16 @@ class ChatViewModel @Inject constructor(
             }
         }
 
-        // Auto-start scan on launch if database is empty
+        // Auto-start scan or fast chunking on launch
         viewModelScope.launch {
             val count = fileRepository.getTotalIndexedCount()
             if (count == 0) {
                 storageIndexManager.startScan()
+            } else {
+                val chunkCount = chunkDao.getTotalChunkCount()
+                if (chunkCount < 100) {
+                    storageIndexManager.startFastDocumentChunking()
+                }
             }
         }
     }
@@ -477,6 +482,26 @@ class ChatViewModel @Inject constructor(
 
     fun triggerScan() {
         storageIndexManager.startScan(force = true)
+    }
+
+    fun summarizeFile(file: FileItem) {
+        val userMsg = ChatMessage(
+            sender = MessageSender.USER,
+            text = "Summarize ${file.name}"
+        )
+        _uiState.value = _uiState.value.copy(
+            messages = _uiState.value.messages + userMsg,
+            isProcessing = true
+        )
+        viewModelScope.launch {
+            try {
+                summarizeDocumentOrTopic(file.name)
+            } catch (e: Exception) {
+                addAssistantMessage("Error summarizing ${file.name}: ${e.localizedMessage}")
+            } finally {
+                _uiState.value = _uiState.value.copy(isProcessing = false)
+            }
+        }
     }
 
     fun recordFileOpened(file: FileItem) {

@@ -11,7 +11,7 @@ import javax.inject.Singleton
 @Singleton
 class IntentParser @Inject constructor(
     private val gson: Gson,
-    private val llmEngine: OnDeviceLlmEngine
+    private val llmEngine: OnDeviceLlmEngine? = null
 ) {
     /**
      * Parses natural language user input into a strongly-typed StorageIntent.
@@ -84,7 +84,7 @@ class IntentParser @Inject constructor(
         }
 
         // 4. If On-Device Gemma LLM is available, use it for intelligent intent extraction
-        if (llmEngine.isModelAvailable()) {
+        if (llmEngine != null && llmEngine.isModelAvailable()) {
             val prompt = """
 You are the StorageSense intent classifier. The user wants to manage their Android files.
 Analyze this input: "$raw"

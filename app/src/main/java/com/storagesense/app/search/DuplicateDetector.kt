@@ -10,6 +10,8 @@ import com.storagesense.app.domain.model.DuplicateGroup
 import com.storagesense.app.domain.model.DuplicateType
 import com.storagesense.app.domain.model.FileItem
 import com.storagesense.app.indexing.FileScanner
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
@@ -32,7 +34,7 @@ class DuplicateDetector @Inject constructor(
         const val IMAGE_SIMILARITY_THRESHOLD = 0.90f
     }
 
-    suspend fun findExactDuplicates(): List<DuplicateGroup> {
+    suspend fun findExactDuplicates(): List<DuplicateGroup> = withContext(Dispatchers.IO) {
         val allFiles = fileMetadataDao.getAll().map { it.toDomain() }
         val sizeCandidateGroups = allFiles.filter { it.sizeBytes > 0 }
             .groupBy { it.sizeBytes }
@@ -41,8 +43,22 @@ class DuplicateDetector @Inject constructor(
         val duplicateGroups = mutableListOf<DuplicateGroup>()
 
         for ((_, candidateFiles) in sizeCandidateGroups) {
-            // Use the hash already precomputed by the background indexer (FileScanner)
-            val fastHashGroups = candidateFiles.groupBy { fileItem ->
+            // Compute hashes on-demand for exact size matches
+            val hashedFiles = candidateFiles.map { fileItem ->
+                if (fileItem.sha256Hash.isNullOrEmpty()) {
+                    val file = java.io.File(fileItem.path)
+                    if (file.exists()) {
+                        val computedHash = fileScanner.computeSha256(file)
+                        val updated = fileItem.copy(sha256Hash = computedHash)
+                        fileMetadataDao.insertOrUpdate(com.storagesense.app.data.local.room.entity.FileMetadataEntity.fromDomain(updated))
+                        updated
+                    } else fileItem
+                } else {
+                    fileItem
+                }
+            }
+            
+            val fastHashGroups = hashedFiles.groupBy { fileItem ->
                 fileItem.sha256Hash ?: ""
             }.filter { it.key.isNotEmpty() && it.value.size > 1 }
 
@@ -68,12 +84,12 @@ class DuplicateDetector @Inject constructor(
             }
         }
 
-        return duplicateGroups
+        duplicateGroups
     }
 
-    suspend fun findNearDuplicateDocuments(): List<DuplicateGroup> {
+    suspend fun findNearDuplicateDocuments(): List<DuplicateGroup> = withContext(Dispatchers.Default) {
         val chunks = documentChunkDao.getAllChunksWithEmbeddings()
-        if (chunks.size < 2) return emptyList()
+        if (chunks.size < 2) return@withContext emptyList()
 
         val chunksByFile = chunks.groupBy { it.fileId }
         val fileIds = chunksByFile.keys.toList()
@@ -140,7 +156,7 @@ class DuplicateDetector @Inject constructor(
             }
         }
 
-        return duplicateGroups
+        duplicateGroups
     }
 
     private fun computeCentroid(chunks: List<DocumentChunkEntity>): FloatArray? {
@@ -173,9 +189,9 @@ class DuplicateDetector @Inject constructor(
         return centroid
     }
 
-    suspend fun findNearDuplicateImages(): List<DuplicateGroup> {
+    suspend fun findNearDuplicateImages(): List<DuplicateGroup> = withContext(Dispatchers.Default) {
         val images = imageIndexDao.getAllWithEmbeddings()
-        if (images.size < 2) return emptyList()
+        if (images.size < 2) return@withContext emptyList()
 
         val duplicateGroups = mutableListOf<DuplicateGroup>()
         val processedPairs = mutableSetOf<Pair<Long, Long>>()
@@ -211,7 +227,7 @@ class DuplicateDetector @Inject constructor(
             }
         }
 
-        return duplicateGroups
+        duplicateGroups
     }
 
     /**

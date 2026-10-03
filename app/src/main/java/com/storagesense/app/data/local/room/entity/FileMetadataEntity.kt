@@ -26,7 +26,9 @@ data class FileMetadataEntity(
     val sha256Hash: String? = null,
     val category: String,
     val isImportant: Boolean = false,
-    val indexedEpochMs: Long = System.currentTimeMillis()
+    val indexedEpochMs: Long = System.currentTimeMillis(),
+    val imageLabels: String = "", // Stored as comma-separated string
+    val hasFaces: Boolean = false
 ) {
     fun toDomain(): FileItem {
         return FileItem(
@@ -43,7 +45,9 @@ data class FileMetadataEntity(
                 FileCategory.fromExtension(extension)
             },
             isImportant = isImportant,
-            indexedEpochMs = indexedEpochMs
+            indexedEpochMs = indexedEpochMs,
+            imageLabels = if (imageLabels.isBlank()) emptyList() else imageLabels.split(","),
+            hasFaces = hasFaces
         )
     }
 
@@ -59,7 +63,9 @@ data class FileMetadataEntity(
                 sha256Hash = item.sha256Hash,
                 category = item.category.name,
                 isImportant = item.isImportant,
-                indexedEpochMs = item.indexedEpochMs
+                indexedEpochMs = item.indexedEpochMs,
+                imageLabels = item.imageLabels.joinToString(","),
+                hasFaces = item.hasFaces
             )
         }
     }

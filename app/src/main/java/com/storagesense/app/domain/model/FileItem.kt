@@ -41,7 +41,9 @@ data class FileItem(
     val sha256Hash: String? = null,
     val category: FileCategory = FileCategory.fromExtension(extension),
     val isImportant: Boolean = false,
-    val indexedEpochMs: Long = System.currentTimeMillis()
+    val indexedEpochMs: Long = System.currentTimeMillis(),
+    val imageLabels: List<String> = emptyList(),
+    val hasFaces: Boolean = false
 ) {
     val formattedSize: String
         get() {

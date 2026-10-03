@@ -14,7 +14,7 @@ class VectorSearchEngine @Inject constructor(
     private val fileMetadataDao: FileMetadataDao,
     private val textEmbeddingModel: TextEmbeddingModel
 ) {
-    suspend fun search(queryVector: FloatArray, limit: Int = 50, minScore: Float = 0.25f): List<SearchResult> {
+    suspend fun search(queryVector: FloatArray, limit: Int = 50, minScore: Float = 0.45f): List<SearchResult> {
         val allChunks = chunkDao.getAllChunksWithEmbeddings()
         if (allChunks.isEmpty()) return emptyList()
 

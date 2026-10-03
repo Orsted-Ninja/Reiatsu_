@@ -62,6 +62,8 @@ class SearchDao @Inject constructor(
         }
     }
 
+    suspend fun batchIndexFilenames(items: List<Pair<Long, String>>) = indexBatchFilenames(items)
+
     suspend fun indexImageOcr(fileId: Long, filename: String, ocrText: String) {
         val writableDb = db
         writableDb.execSQL(

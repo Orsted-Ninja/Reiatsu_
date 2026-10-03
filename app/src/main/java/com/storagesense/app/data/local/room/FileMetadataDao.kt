@@ -72,4 +72,7 @@ interface FileMetadataDao {
 
     @Query("DELETE FROM file_metadata WHERE path = :path")
     suspend fun deleteByPath(path: String)
+
+    @Query("DELETE FROM file_metadata WHERE path LIKE :prefix || '%'")
+    suspend fun deleteByPathPrefix(prefix: String): Int
 }

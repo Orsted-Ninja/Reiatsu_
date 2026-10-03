@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
@@ -65,7 +66,8 @@ fun FileResultCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     onOpen: ((FileItem) -> Unit)? = null,
-    onDelete: ((FileItem) -> Unit)? = null
+    onDelete: ((FileItem) -> Unit)? = null,
+    onSummarize: ((FileItem) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val file = result.file
@@ -207,12 +209,30 @@ fun FileResultCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Action row: Open & Delete buttons
+            // Action row: Open, Summarize, & Delete buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val isDocument = file.category == FileCategory.DOCUMENT_PDF ||
+                                 file.category == FileCategory.DOCUMENT_WORD ||
+                                 file.category == FileCategory.DOCUMENT_SLIDES ||
+                                 file.category == FileCategory.DOCUMENT_TEXT
+
+                if (isDocument && onSummarize != null) {
+                    OutlinedButton(
+                        onClick = { onSummarize(file) },
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "Summarize", modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Summarize", fontSize = 12.sp)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+
                 OutlinedButton(
                     onClick = { handleOpen() },
                     shape = RoundedCornerShape(8.dp),

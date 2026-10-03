@@ -135,52 +135,46 @@ class RagEngine @Inject constructor(
             }
         }
 
-        // 1. Pure On-Device Gemma LLM Execution (if model file is present)
-        if (onDeviceLlmEngine.isModelAvailable()) {
-            val contextBuilder = StringBuilder()
-            for ((idx, res) in topResults.withIndex()) {
-                val fileName = res.file.name
-                val excerpt = if (idx == 0 && primaryContent.isNotBlank()) {
-                    primaryContent.take(1200)
-                } else {
-                    val fileText = extractContentForFile(res.file, query)
-                    if (fileText.isNotBlank()) fileText.take(600) else (res.matchedSnippet ?: "Matching document")
-                }
-                contextBuilder.append("Document ${idx + 1}: $fileName\nExcerpt: \"$excerpt\"\n\n")
-            }
-
-            val prompt = """
-                <start_of_turn>user
-                You are StorageSense, an intelligent on-device personal file assistant running locally on Android.
-                Answer the user's question directly and concisely based strictly on these matching files found in storage:
-
-                $contextBuilder
-                Question: $query
-                Answer:<end_of_turn>
-                <start_of_turn>model
-            """.trimIndent()
-
-            var emittedAny = false
-            try {
-                onDeviceLlmEngine.streamGenerate(prompt).collect { token ->
-                    emittedAny = true
-                    emit(token)
-                }
-            } catch (_: Exception) {
-                // Fallback to semantic synthesizer on error
-            }
-
-            if (emittedAny) return@flow
-        }
-
-        // 2. On-Device Semantic Extractor (Zero-Cloud, Built-in Fallback)
-        val isNotesOrSummaryQuery = query.contains("note", ignoreCase = true) ||
-                query.contains("summar", ignoreCase = true) ||
+        // 1. Explicit Document / Notes Summarization (LLM as Dedicated Summarizer)
+        val isExplicitSummaryRequest = query.contains("summar", ignoreCase = true) ||
                 query.contains("explain", ignoreCase = true) ||
-                query.contains("what is", ignoreCase = true) ||
-                query.contains("module", ignoreCase = true)
+                query.contains("what is in", ignoreCase = true) ||
+                query.contains("overview of", ignoreCase = true)
 
-        if (isNotesOrSummaryQuery && primaryContent.length > 50) {
+        if (isExplicitSummaryRequest && primaryContent.isNotBlank()) {
+            if (onDeviceLlmEngine.isModelAvailable()) {
+                val truncatedContent = if (primaryContent.length > 3500) primaryContent.take(3500) + "\n...[truncated]..." else primaryContent
+                val prompt = """
+                    <start_of_turn>user
+                    You are StorageSense, an on-device document assistant running locally on Android.
+                    Summarize the following content from "${topResult.file.name}" to address the request: "$query".
+                    Highlight key takeaways, main concepts, or formulas concisely under 150 words.
+
+                    Content:
+                    \"\"\"
+                    $truncatedContent
+                    \"\"\"
+
+                    Summary:<end_of_turn>
+                    <start_of_turn>model
+                """.trimIndent()
+
+                var emittedAny = false
+                try {
+                    onDeviceLlmEngine.streamGenerate(prompt).collect { token ->
+                        emittedAny = true
+                        emit(token)
+                    }
+                } catch (_: Exception) {}
+
+                if (emittedAny) {
+                    val modelName = onDeviceLlmEngine.getDetectedModelName() ?: "LLM"
+                    emit("\n\n*(Summarized by on-device $modelName from indexed file)*")
+                    return@flow
+                }
+            }
+
+            // Extractive fallback when LLM is not loaded
             val lines = primaryContent.split(Regex("(?<=[.!?\\n])\\s+"))
                 .map { it.trim() }
                 .filter { it.length > 20 && !it.startsWith("http") && !it.startsWith("doi") }
@@ -188,7 +182,7 @@ class RagEngine @Inject constructor(
                 .take(6)
 
             val sb = StringBuilder()
-            sb.append("📄 **Found Notes in ${topResult.file.name}**:\n\n")
+            sb.append("📄 **Summary of ${topResult.file.name}**:\n\n")
             if (lines.isNotEmpty()) {
                 for (line in lines) {
                     val cleanLine = line.replace(Regex("^[•\\-→*\\d.]+\\s*"), "")
@@ -199,11 +193,12 @@ class RagEngine @Inject constructor(
             } else {
                 sb.append(primaryContent.take(300) + "...\n")
             }
-            sb.append("\n*(Tap the card below to open full document in Universal Viewer)*\n")
+            sb.append("\n*(Extracted from indexed document chunks • Tap card below to open)*\n")
             emit(sb.toString())
             return@flow
         }
 
+        // 2. Standard Search Results (Finding files is 100% deterministic & indexed via Okapi BM25)
         val intro = "Found **${results.size}** matching files for **\"$query\"**:\n\n"
         emit(intro)
 
@@ -219,11 +214,10 @@ class RagEngine @Inject constructor(
             emit(bullet)
         }
 
-        val modelName = onDeviceLlmEngine.getDetectedModelName()
-        val footer = if (modelName != null) {
-            "*(Powered by on-device $modelName)*"
+        val footer = if (onDeviceLlmEngine.isModelAvailable()) {
+            "*(Found via indexed chunk search • Tap card to Open, Delete, or Summarize with on-device LLM)*"
         } else {
-            "*(💡 Place `gemma-2b-it.bin` or `gemma-4-e2b-it.litertlm` in `/sdcard/StorageSense/models/` for full generative on-device LLM reasoning)*"
+            "*(Found via indexed chunk search • 100% on-device Okapi BM25 retrieval)*"
         }
         emit("\n$footer")
     }

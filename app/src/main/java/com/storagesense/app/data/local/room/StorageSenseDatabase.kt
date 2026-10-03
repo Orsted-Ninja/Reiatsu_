@@ -19,7 +19,7 @@ import com.storagesense.app.data.local.room.entity.ImageIndexEntity
         ActionLogEntity::class,
         com.storagesense.app.ai.face.FaceClusterEntity::class
     ],
-    version = 1,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
