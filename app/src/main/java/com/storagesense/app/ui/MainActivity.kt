@@ -142,7 +142,8 @@ fun MainAppContent(
     val screens = listOf(
         Screen.Chat,
         Screen.View,
-        Screen.Search
+        Screen.Search,
+        Screen.Faces
     )
 
     Scaffold(
@@ -214,6 +215,28 @@ fun MainAppContent(
                     is Screen.Chat -> ChatScreen(viewModel = chatViewModel)
                     is Screen.View -> ViewScreen(viewModel = viewViewModel)
                     is Screen.Search -> SearchScreen(viewModel = searchViewModel)
+                    is Screen.Faces -> {
+                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                        com.storagesense.app.ui.faces.FacesScreen(
+                            onImageClick = { path ->
+                                try {
+                                    val file = java.io.File(path)
+                                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                                        ctx,
+                                        "${ctx.packageName}.fileprovider",
+                                        file
+                                    )
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                        setDataAndType(uri, "image/*")
+                                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    ctx.startActivity(intent)
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(ctx, "Could not open image", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }

@@ -18,6 +18,7 @@ coil = "2.7.0"
 pdfbox = "2.0.27.0"
 onnxruntime = "1.18.0"
 mlkitText = "16.0.1"
+mlkitFace = "16.1.6"
 mediapipeGenai = "0.10.35"
 media3 = "1.4.1"
 coroutines = "1.8.1"
@@ -70,11 +71,13 @@ androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.re
 # ML & AI
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
+mlkit-face-detection = { group = "com.google.mlkit", name = "face-detection", version.ref = "mlkitFace" }
 mediapipe-tasks-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipeGenai" }
 
 # Coroutines & JSON
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 
 [plugins]

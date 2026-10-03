@@ -27,6 +27,11 @@ MODELS = {
         "name": "gemma-4-text-only.litertlm (HuggingFace, ~2.58 GB, Compact Instruct)",
         "filename": "gemma-4-text-only.litertlm",
         "url": "https://huggingface.co/developerabu/gemma-4-e2b-text-only-litertlm/resolve/main/gemma-4-text-only.litertlm"
+    },
+    "4": {
+        "name": "mobilefacenet.onnx (ONNX Face Recognition embedding model, ~5 MB)",
+        "filename": "mobilefacenet.onnx",
+        "url": "https://github.com/sirius-ai/MobileFaceNet_TF/raw/master/arch/mobilefacenet.onnx"
     }
 }
 

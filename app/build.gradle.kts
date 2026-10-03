@@ -113,6 +113,9 @@ dependencies {
 
     // ML Kit OCR (bundled offline text recognition)
     implementation(libs.mlkit.text.recognition)
+    
+    // ML Kit Face Detection
+    implementation(libs.mlkit.face.detection)
 
     // Google MediaPipe Tasks GenAI for 100% On-Device Gemma Inference
     implementation(libs.mediapipe.tasks.genai)
@@ -120,6 +123,7 @@ dependencies {
     // Utilities
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.gson)
 
     // Testing

@@ -14,6 +14,12 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
+import com.storagesense.app.ai.face.FaceDetectionEngine
+import com.storagesense.app.ai.face.FaceEmbeddingEngine
+import com.storagesense.app.data.local.room.FaceClusterDao
+import com.storagesense.app.ai.face.FaceClusterEntity
+import android.graphics.BitmapFactory
+
 @Singleton
 class IndexingPipeline @Inject constructor(
     private val extractorFactory: ExtractorFactory,
@@ -22,7 +28,10 @@ class IndexingPipeline @Inject constructor(
     private val mobileClipModel: MobileCLIPModel,
     private val ocrEngine: OcrEngine,
     private val fileRepository: FileRepository,
-    private val searchRepository: SearchRepository
+    private val searchRepository: SearchRepository,
+    private val faceDetectionEngine: FaceDetectionEngine,
+    private val faceEmbeddingEngine: FaceEmbeddingEngine,
+    private val faceClusterDao: FaceClusterDao
 ) {
     /**
      * Fully indexes a file: extracts text/OCR, creates chunks, computes embeddings, and stores index.
@@ -119,5 +128,30 @@ class IndexingPipeline @Inject constructor(
             ocrText = ocrResult.fullText,
             clipEmbedding = clipVec
         )
+
+        // Face Grouping hook
+        try {
+            val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+            if (bitmap != null) {
+                val faces = faceDetectionEngine.detectFaces(bitmap)
+                for (faceBmp in faces) {
+                    val embedding = faceEmbeddingEngine.getEmbedding(faceBmp)
+                    if (embedding != null) {
+                        // Store as ByteArray for Room
+                        val buffer = java.nio.ByteBuffer.allocate(embedding.size * 4)
+                        buffer.asFloatBuffer().put(embedding)
+                        
+                        val entity = FaceClusterEntity(
+                            imagePath = file.absolutePath,
+                            faceEmbedding = buffer.array(),
+                            personClusterId = -1 // Unclustered
+                        )
+                        faceClusterDao.insertFace(entity)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore face detection errors for individual files
+        }
     }
 }

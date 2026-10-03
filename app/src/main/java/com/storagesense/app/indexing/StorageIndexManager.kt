@@ -16,6 +16,11 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
+import com.storagesense.app.ai.face.FaceClusterer
+import com.storagesense.app.data.local.room.FaceClusterDao
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+
 enum class ScanPhase {
     IDLE,
     SCANNING_METADATA,
@@ -40,7 +45,9 @@ class StorageIndexManager @Inject constructor(
     private val fileScanner: FileScanner,
     private val indexingPipeline: IndexingPipeline,
     private val fileRepository: FileRepository,
-    private val searchDao: SearchDao
+    private val searchDao: SearchDao,
+    private val faceClusterer: FaceClusterer,
+    private val faceClusterDao: FaceClusterDao
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _progress = MutableStateFlow(IndexProgress())
@@ -139,6 +146,27 @@ class StorageIndexManager @Inject constructor(
                             message = "Indexing (${idx + 1}/${prioritizedDocs.size}): ${doc.name}"
                         )
                         indexingPipeline.indexFile(doc)
+                    }
+                }
+
+                _progress.value = _progress.value.copy(
+                    message = "Grouping faces..."
+                )
+                
+                // Fetch unclustered faces and existing clusters
+                val unclustered = faceClusterDao.getUnclusteredFaces()
+                if (unclustered.isNotEmpty()) {
+                    val floatEmbeddings = unclustered.map { entity ->
+                        val buffer = ByteBuffer.wrap(entity.faceEmbedding).order(ByteOrder.BIG_ENDIAN).asFloatBuffer()
+                        val array = FloatArray(buffer.capacity())
+                        buffer.get(array)
+                        Pair(entity.id, array)
+                    }
+                    val clusters = faceClusterer.clusterFaces(floatEmbeddings)
+                    for ((clusterId, faceIds) in clusters) {
+                        for (id in faceIds) {
+                            faceClusterDao.updateClusterId(id, clusterId)
+                        }
                     }
                 }
 

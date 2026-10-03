@@ -16,7 +16,8 @@ import com.storagesense.app.data.local.room.entity.ImageIndexEntity
         FileMetadataEntity::class,
         DocumentChunkEntity::class,
         ImageIndexEntity::class,
-        ActionLogEntity::class
+        ActionLogEntity::class,
+        com.storagesense.app.ai.face.FaceClusterEntity::class
     ],
     version = 1,
     exportSchema = false
@@ -27,6 +28,7 @@ abstract class StorageSenseDatabase : RoomDatabase() {
     abstract fun documentChunkDao(): DocumentChunkDao
     abstract fun imageIndexDao(): ImageIndexDao
     abstract fun actionLogDao(): ActionLogDao
+    abstract fun faceClusterDao(): FaceClusterDao
 
     companion object {
         private const val DB_NAME = "storagesense.db"

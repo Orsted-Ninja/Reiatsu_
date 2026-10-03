@@ -42,4 +42,9 @@ object DatabaseModule {
     fun provideActionLogDao(db: StorageSenseDatabase): ActionLogDao {
         return db.actionLogDao()
     }
+
+    @Provides
+    fun provideFaceClusterDao(db: StorageSenseDatabase): com.storagesense.app.data.local.room.FaceClusterDao {
+        return db.faceClusterDao()
+    }
 }
