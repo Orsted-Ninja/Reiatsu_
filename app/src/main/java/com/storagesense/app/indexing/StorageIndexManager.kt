@@ -154,39 +154,37 @@ class StorageIndexManager @Inject constructor(
 
                 // Tier 3: Photo face indexing via Google ML Kit
                 if (photosToIndex.isNotEmpty()) {
+                    val prioritizedPhotos = photosToIndex.sortedByDescending { photo ->
+                        val p = photo.path.lowercase()
+                        when {
+                            p.contains("/dcim/") || p.contains("/camera/") -> 100
+                            p.contains("/pictures/") || p.contains("/whatsapp") -> 50
+                            else -> 10
+                        }
+                    }
+
                     _progress.value = _progress.value.copy(
-                        message = "Detecting faces in ${photosToIndex.size} photos..."
+                        message = "Detecting faces in ${prioritizedPhotos.size} photos..."
                     )
-                    for ((idx, photo) in photosToIndex.withIndex()) {
+                    var count = 0
+                    for ((idx, photo) in prioritizedPhotos.withIndex()) {
                         if (idx % 10 == 0) {
                             _progress.value = _progress.value.copy(
-                                message = "Detecting faces (${idx + 1}/${photosToIndex.size}): ${photo.name}"
+                                message = "Detecting faces (${idx + 1}/${prioritizedPhotos.size}): ${photo.name}"
                             )
                         }
                         indexingPipeline.indexFile(photo)
+                        count++
+                        if (count % 20 == 0) {
+                            clusterAllFaces()
+                        }
                     }
                 }
 
                 _progress.value = _progress.value.copy(
                     message = "Grouping faces..."
                 )
-                
-                // Fetch unclustered faces and existing clusters
-                val unclustered = faceClusterDao.getUnclusteredFaces()
-                if (unclustered.isNotEmpty()) {
-                    val floatEmbeddings = unclustered.map { entity ->
-                        val buffer = ByteBuffer.wrap(entity.faceEmbedding).order(ByteOrder.BIG_ENDIAN).asFloatBuffer()
-                        val array = FloatArray(buffer.capacity())
-                        buffer.get(array)
-                        Pair(entity.id, array)
-                    }
-                    val clusters = faceClusterer.clusterFaces(floatEmbeddings)
-                    for ((clusterId, faceIds) in clusters) {
-                        for (id in faceIds) {
-                            faceClusterDao.updateClusterId(id, clusterId)
-                        }
-                    }
-                }
+                clusterAllFaces()
 
                 _progress.value = IndexProgress(
                     isRunning = false,
@@ -205,6 +203,28 @@ class StorageIndexManager @Inject constructor(
             } finally {
                 isScanRunning = false
             }
+        }
+    }
+
+    private suspend fun clusterAllFaces() {
+        try {
+            val allFaces = faceClusterDao.getAllFaces()
+            if (allFaces.isEmpty()) return
+
+            val floatEmbeddings = allFaces.map { entity ->
+                val buffer = ByteBuffer.wrap(entity.faceEmbedding).order(ByteOrder.BIG_ENDIAN).asFloatBuffer()
+                val array = FloatArray(buffer.capacity())
+                buffer.get(array)
+                Pair(entity.id, array)
+            }
+            val clusters = faceClusterer.clusterFaces(floatEmbeddings)
+            for ((clusterId, faceIds) in clusters) {
+                for (id in faceIds) {
+                    faceClusterDao.updateClusterId(id, clusterId)
+                }
+            }
+        } catch (e: Exception) {
+            // Safe logging / graceful fallback
         }
     }
 }

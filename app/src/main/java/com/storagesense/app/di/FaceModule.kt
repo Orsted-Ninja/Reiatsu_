@@ -7,9 +7,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import java.io.File
 import javax.inject.Singleton
-
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 
@@ -33,6 +31,6 @@ object FaceModule {
     @Provides
     @Singleton
     fun provideFaceClusterer(): FaceClusterer {
-        return FaceClusterer(threshold = 0.75f)
+        return FaceClusterer(threshold = 0.58f)
     }
 }

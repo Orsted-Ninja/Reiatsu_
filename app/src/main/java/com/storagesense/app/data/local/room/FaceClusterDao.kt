@@ -17,12 +17,24 @@ interface FaceClusterDao {
     @Query("UPDATE face_clusters SET personClusterId = :clusterId WHERE id = :id")
     suspend fun updateClusterId(id: Long, clusterId: Int)
 
-    @Query("SELECT DISTINCT personClusterId FROM face_clusters WHERE personClusterId != -1")
+    @Query("SELECT DISTINCT personClusterId FROM face_clusters WHERE personClusterId != -1 ORDER BY personClusterId ASC")
     suspend fun getAllPersonClusterIds(): List<Int>
 
     @Query("SELECT * FROM face_clusters WHERE personClusterId = :clusterId")
     suspend fun getFacesForPerson(clusterId: Int): List<FaceClusterEntity>
-    
+
     @Query("SELECT * FROM face_clusters WHERE personClusterId = -1")
     suspend fun getUnclusteredFaces(): List<FaceClusterEntity>
+
+    @Query("SELECT COUNT(*) FROM face_clusters")
+    suspend fun getTotalFacesCount(): Int
+
+    @Query("SELECT COUNT(*) FROM face_clusters WHERE personClusterId != -1")
+    suspend fun getClusteredFacesCount(): Int
+
+    @Query("SELECT EXISTS(SELECT 1 FROM face_clusters WHERE imagePath = :path LIMIT 1)")
+    suspend fun hasFaceForPath(path: String): Boolean
+
+    @Query("DELETE FROM face_clusters")
+    suspend fun clearAll()
 }

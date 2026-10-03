@@ -369,245 +369,49 @@ fun ViewScreen(
                 val isImages = uiState.activeDrillDownTitle?.contains("Images", ignoreCase = true) == true ||
                         uiState.activeDrillDownTitle?.contains("Photos", ignoreCase = true) == true
 
-                if (uiState.showPeopleFolder) {
-                    // People Folder View inside Images Panel
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(
-                            onClick = { viewModel.closePeopleFolder() },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(VaultSurfaceContainerHigh)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = VaultPrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = if (uiState.selectedPersonClusterId == null) "People & Faces" else "Person ${uiState.selectedPersonClusterId}",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp
-                                ),
-                                color = VaultOnSurface
-                            )
-                            val subText = if (uiState.selectedPersonClusterId == null) {
-                                "${uiState.faceClusters.size} detected individuals"
-                            } else {
-                                "${uiState.faceClusters[uiState.selectedPersonClusterId]?.size ?: 0} photos"
-                            }
-                            Text(
-                                text = subText,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = VaultPrimary
-                            )
-                        }
-                    }
-
-                    if (uiState.isFaceScanning) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(
-                                    color = VaultPrimary,
-                                    modifier = Modifier.size(36.dp),
-                                    strokeWidth = 3.dp
-                                )
-                                Spacer(modifier = Modifier.height(14.dp))
-                                Text(
-                                    text = uiState.faceScanProgressText.ifBlank { "Detecting faces with Google ML Kit..." },
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                                    color = VaultOnSurface,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Processing locally on your device",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = VaultOutline
-                                )
-                            }
-                        }
-                    } else if (uiState.faceClusters.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // HEADER ROW
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isImages && uiState.activeImageClassification == ImageClassification.PEOPLE && uiState.selectedPersonClusterId != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { viewModel.closePeopleFolder() },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(VaultSurfaceContainerHigh)
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Default.Face,
-                                    contentDescription = null,
-                                    tint = VaultOutline.copy(alpha = 0.5f),
-                                    modifier = Modifier.size(48.dp)
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = VaultPrimary,
+                                    modifier = Modifier.size(18.dp)
                                 )
-                                Spacer(modifier = Modifier.height(10.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
                                 Text(
-                                    text = "No grouped faces found yet",
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    text = "Person ${uiState.selectedPersonClusterId}",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp
+                                    ),
                                     color = VaultOnSurface
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                val pCount = uiState.faceClusters[uiState.selectedPersonClusterId]?.size ?: 0
                                 Text(
-                                    text = "Google ML Kit will analyze your photos to detect and cluster similar faces.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = VaultOutline,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                    modifier = Modifier.padding(horizontal = 24.dp)
+                                    text = "$pCount photos",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = VaultPrimary
                                 )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Button(
-                                    onClick = { viewModel.scanFacesNow() },
-                                    colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary),
-                                    shape = RoundedCornerShape(20.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Face,
-                                        contentDescription = null,
-                                        tint = Color.Black,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Scan Photos for Faces", color = Color.Black, fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-                        }
-                    } else if (uiState.selectedPersonClusterId == null) {
-                        // Grid of all People folders
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(3),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentPadding = PaddingValues(bottom = 28.dp)
-                        ) {
-                            items(uiState.faceClusters.keys.toList()) { clusterId ->
-                                val faces = uiState.faceClusters[clusterId] ?: emptyList()
-                                val coverPath = faces.firstOrNull()?.imagePath
-                                Card(
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = VaultSurfaceContainerLow),
-                                    border = BorderStroke(1.dp, VaultOutlineVariant.copy(alpha = 0.4f)),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { viewModel.selectPersonCluster(clusterId) }
-                                ) {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        modifier = Modifier.padding(8.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(76.dp)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .background(VaultSurfaceContainerHigh),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            if (coverPath != null) {
-                                                androidx.compose.foundation.Image(
-                                                    painter = rememberAsyncImagePainter(java.io.File(coverPath)),
-                                                    contentDescription = "Person $clusterId",
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier.fillMaxSize()
-                                                )
-                                            } else {
-                                                Icon(
-                                                    imageVector = Icons.Default.Face,
-                                                    contentDescription = null,
-                                                    tint = VaultPrimary
-                                                )
-                                            }
-                                        }
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Text(
-                                            text = "Person $clusterId",
-                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = VaultOnSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = "${faces.size} photos",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            color = VaultOutline
-                                        )
-                                    }
-                                }
                             }
                         }
                     } else {
-                        // Photos belonging to the selected person
-                        val faces = uiState.faceClusters[uiState.selectedPersonClusterId] ?: emptyList()
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(3),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentPadding = PaddingValues(bottom = 28.dp)
-                        ) {
-                            items(faces) { face ->
-                                val f = java.io.File(face.imagePath)
-                                Card(
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = CardDefaults.cardColors(containerColor = VaultSurfaceContainerLow),
-                                    modifier = Modifier
-                                        .aspectRatio(1f)
-                                        .clickable {
-                                            if (f.exists()) {
-                                                val fileItem = FileItem(
-                                                    id = f.hashCode().toLong(),
-                                                    path = f.absolutePath,
-                                                    name = f.name,
-                                                    extension = f.extension,
-                                                    sizeBytes = f.length(),
-                                                    lastModifiedEpochMs = f.lastModified(),
-                                                    sha256Hash = "",
-                                                    category = FileCategory.IMAGE_PHOTO,
-                                                    isImportant = false
-                                                )
-                                                previewingFile = fileItem
-                                                viewModel.recordFileOpened(fileItem)
-                                            }
-                                        }
-                                ) {
-                                    androidx.compose.foundation.Image(
-                                        painter = rememberAsyncImagePainter(f),
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // Standard Category File List with People Subfolder Card if viewing Photos
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = uiState.activeDrillDownTitle ?: "",
@@ -617,35 +421,272 @@ fun ViewScreen(
                                 ),
                                 color = VaultOnSurface
                             )
-                            val totalBytes = uiState.activeDrillDownFiles.sumOf { it.sizeBytes }
+                            val subText = if (isImages && uiState.activeImageClassification == ImageClassification.PEOPLE) {
+                                "${uiState.faceClusters.size} detected individuals"
+                            } else {
+                                val totalBytes = uiState.activeDrillDownFiles.sumOf { it.sizeBytes }
+                                "${uiState.activeDrillDownFiles.size} items • ${formatBytesHelper(totalBytes)}"
+                            }
                             Text(
-                                text = "${uiState.activeDrillDownFiles.size} items • ${formatBytesHelper(totalBytes)}",
+                                text = subText,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = VaultPrimary
                             )
                         }
+                    }
 
-                        if (isTrash && uiState.activeDrillDownFiles.isNotEmpty()) {
-                            OutlinedButton(
-                                onClick = { viewModel.emptyTrash() },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
-                                border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.6f)),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(20.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DeleteForever,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = DangerRed
+                    if (isTrash && uiState.activeDrillDownFiles.isNotEmpty()) {
+                        OutlinedButton(
+                            onClick = { viewModel.emptyTrash() },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
+                            border = BorderStroke(1.dp, DangerRed.copy(alpha = 0.6f)),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteForever,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = DangerRed
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Empty Trash", fontSize = 11.sp, color = DangerRed)
+                        }
+                    }
+                }
+
+                // If viewing Images, show classification chips: All, People, Text, Vehicles, Screenshots
+                if (isImages && uiState.selectedPersonClusterId == null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val classifications = listOf(
+                            Pair(ImageClassification.ALL, "All"),
+                            Pair(ImageClassification.PEOPLE, "People"),
+                            Pair(ImageClassification.TEXT, "Text"),
+                            Pair(ImageClassification.VEHICLES, "Vehicles"),
+                            Pair(ImageClassification.SCREENSHOTS, "Screenshots")
+                        )
+                        for ((cls, label) in classifications) {
+                            val isSelected = uiState.activeImageClassification == cls
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.setImageClassification(cls) },
+                                label = {
+                                    Text(
+                                        label,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = VaultPrimary.copy(alpha = 0.22f),
+                                    selectedLabelColor = VaultPrimary,
+                                    containerColor = VaultSurfaceContainerLow,
+                                    labelColor = VaultOnSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Empty Trash", fontSize = 11.sp, color = DangerRed)
+                            )
+                        }
+                    }
+                }
+
+                // BODY: Check if in People mode
+                if (isImages && uiState.activeImageClassification == ImageClassification.PEOPLE) {
+                    if (uiState.selectedPersonClusterId != null) {
+                        // Viewing single Person's photos
+                        val faces = uiState.faceClusters[uiState.selectedPersonClusterId] ?: emptyList()
+                        if (faces.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("No photos found for this person", color = VaultOutline)
+                            }
+                        } else {
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(3),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth().weight(1f),
+                                contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp)
+                            ) {
+                                items(faces) { face ->
+                                    val f = java.io.File(face.imagePath)
+                                    Card(
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = CardDefaults.cardColors(containerColor = VaultSurfaceContainerLow),
+                                        modifier = Modifier
+                                            .aspectRatio(1f)
+                                            .clickable {
+                                                if (f.exists()) {
+                                                    val fileItem = FileItem(
+                                                        id = f.hashCode().toLong(),
+                                                        path = f.absolutePath,
+                                                        name = f.name,
+                                                        extension = f.extension,
+                                                        sizeBytes = f.length(),
+                                                        lastModifiedEpochMs = f.lastModified(),
+                                                        sha256Hash = "",
+                                                        category = FileCategory.IMAGE_PHOTO,
+                                                        isImportant = false
+                                                    )
+                                                    previewingFile = fileItem
+                                                    viewModel.recordFileOpened(fileItem)
+                                                }
+                                            }
+                                    ) {
+                                        androidx.compose.foundation.Image(
+                                            painter = rememberAsyncImagePainter(f),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // People Album Grid View
+                        if (uiState.isFaceScanning) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(VaultSurfaceContainerLow)
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = VaultPrimary,
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Text(
+                                        text = uiState.faceScanProgressText.ifBlank { "Analyzing photos with Google ML Kit..." },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = VaultOnSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        if (uiState.faceClusters.isEmpty() && !uiState.isFaceScanning) {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = Icons.Default.Face,
+                                        contentDescription = null,
+                                        tint = VaultOutline.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        text = "No grouped faces found yet",
+                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = VaultOnSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Google ML Kit will analyze your photos to detect and cluster similar faces.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = VaultOutline,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(
+                                        onClick = { viewModel.scanFacesNow() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary),
+                                        shape = RoundedCornerShape(20.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Face,
+                                            contentDescription = null,
+                                            tint = Color.Black,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Scan Photos for Faces", color = Color.Black, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                        } else {
+                            // Grid of all People folders
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(3),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth().weight(1f),
+                                contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp)
+                            ) {
+                                items(uiState.faceClusters.keys.toList().sorted()) { clusterId ->
+                                    val faces = uiState.faceClusters[clusterId] ?: emptyList()
+                                    val coverPath = faces.firstOrNull()?.imagePath
+                                    Card(
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(containerColor = VaultSurfaceContainerLow),
+                                        border = BorderStroke(1.dp, VaultOutlineVariant.copy(alpha = 0.4f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { viewModel.selectPersonCluster(clusterId) }
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier.padding(8.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(76.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(VaultSurfaceContainerHigh),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (coverPath != null) {
+                                                    androidx.compose.foundation.Image(
+                                                        painter = rememberAsyncImagePainter(java.io.File(coverPath)),
+                                                        contentDescription = "Person $clusterId",
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                } else {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Face,
+                                                        contentDescription = null,
+                                                        tint = VaultPrimary
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                text = "Person $clusterId",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = VaultOnSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = "${faces.size} photos",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                color = VaultOutline
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
-
-                    // Sort Filter Chips Row
+                } else {
+                    // Standard Category File List with Sort Filter Chips (All, Text, Vehicles, Screenshots, Documents, etc.)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -688,63 +729,6 @@ fun ViewScreen(
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
-
-                    // People Subfolder Card (inside Images & Photos panel)
-                    if (isImages) {
-                        Card(
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = VaultSurfaceContainerLow),
-                            border = BorderStroke(1.dp, VaultOutlineVariant.copy(alpha = 0.45f)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { viewModel.openPeopleFolder() }
-                                .padding(bottom = 10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(42.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(VaultPrimary.copy(alpha = 0.14f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Face,
-                                            contentDescription = null,
-                                            tint = VaultPrimary,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            text = "People",
-                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                            color = VaultOnSurface
-                                        )
-                                        Text(
-                                            text = if (uiState.faceClusters.isNotEmpty()) "${uiState.faceClusters.size} detected people groups" else "Google ML Kit facial groups",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = VaultOnSurfaceVariant
-                                        )
-                                    }
-                                }
-                                Icon(
-                                    imageVector = Icons.Default.ChevronRight,
-                                    contentDescription = null,
-                                    tint = VaultOutline,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
 
                     // File List or Empty State
                     if (uiState.activeDrillDownFiles.isEmpty()) {

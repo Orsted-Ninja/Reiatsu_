@@ -80,6 +80,14 @@ enum class SortOption {
     NAME_ASC
 }
 
+enum class ImageClassification(val label: String) {
+    ALL("All"),
+    PEOPLE("People"),
+    TEXT("Text"),
+    VEHICLES("Vehicles"),
+    SCREENSHOTS("Screenshots")
+}
+
 fun formatBytesHelper(bytes: Long): String {
     val kb = bytes / 1024.0
     val mb = kb / 1024.0
@@ -188,6 +196,7 @@ data class ViewUiState(
     val activeDrillDownTitle: String? = null,
     val activeDrillDownFiles: List<FileItem> = emptyList(),
     val currentSortOption: SortOption = SortOption.SIZE_DESC,
+    val activeImageClassification: ImageClassification = ImageClassification.ALL,
     val reclaimableTotalBytes: Long = 0L,
     val reclaimableCategories: List<ReclaimableCategory> = emptyList(),
     val pendingActionProposal: ActionProposal? = null,
@@ -310,16 +319,79 @@ class ViewViewModel @Inject constructor(
         }
     }
 
+    private var rawCategoryFiles: List<FileItem> = emptyList()
+
     fun toggleViewMode() {
         _uiState.value = _uiState.value.copy(isGridView = !_uiState.value.isGridView)
     }
 
     fun setSortOption(sort: SortOption) {
-        val sorted = sortFiles(_uiState.value.activeDrillDownFiles, sort)
+        _uiState.value = _uiState.value.copy(currentSortOption = sort)
+        val isImages = _uiState.value.activeDrillDownTitle?.contains("Images", ignoreCase = true) == true ||
+                _uiState.value.activeDrillDownTitle?.contains("Photos", ignoreCase = true) == true
+        if (isImages) {
+            applyClassificationFilter()
+        } else {
+            _uiState.value = _uiState.value.copy(
+                activeDrillDownFiles = sortFiles(rawCategoryFiles, sort)
+            )
+        }
+    }
+
+    fun setImageClassification(classification: ImageClassification) {
         _uiState.value = _uiState.value.copy(
-            currentSortOption = sort,
-            activeDrillDownFiles = sorted
+            activeImageClassification = classification,
+            selectedPersonClusterId = null,
+            showPeopleFolder = (classification == ImageClassification.PEOPLE)
         )
+        if (classification == ImageClassification.PEOPLE) {
+            if (_uiState.value.faceClusters.isEmpty() && !_uiState.value.isFaceScanning) {
+                scanFacesNow()
+            }
+        } else {
+            applyClassificationFilter()
+        }
+    }
+
+    private fun applyClassificationFilter() {
+        val allPhotos = rawCategoryFiles
+        val filtered = when (_uiState.value.activeImageClassification) {
+            ImageClassification.ALL -> allPhotos
+            ImageClassification.PEOPLE -> allPhotos
+            ImageClassification.TEXT -> allPhotos.filter { isTextImage(it) }
+            ImageClassification.VEHICLES -> allPhotos.filter { isVehicleImage(it) }
+            ImageClassification.SCREENSHOTS -> allPhotos.filter {
+                it.category == FileCategory.IMAGE_SCREENSHOT ||
+                        it.path.contains("screenshot", ignoreCase = true) ||
+                        it.name.contains("screenshot", ignoreCase = true)
+            }
+        }
+        _uiState.value = _uiState.value.copy(
+            activeDrillDownFiles = sortFiles(filtered, _uiState.value.currentSortOption)
+        )
+    }
+
+    private fun isTextImage(file: FileItem): Boolean {
+        val nameLower = file.name.lowercase(Locale.ROOT)
+        val pathLower = file.path.lowercase(Locale.ROOT)
+        val textKeywords = listOf(
+            "receipt", "invoice", "bill", "statement", "doc", "scan", "note", "text",
+            "page", "paper", "card", "aadhar", "aadhaar", "pan", "form", "sheet",
+            "book", "menu", "slide", "code", "table", "cert", "pass", "id_"
+        )
+        return textKeywords.any { nameLower.contains(it) || pathLower.contains(it) }
+    }
+
+    private fun isVehicleImage(file: FileItem): Boolean {
+        val nameLower = file.name.lowercase(Locale.ROOT)
+        val pathLower = file.path.lowercase(Locale.ROOT)
+        val vehicleKeywords = listOf(
+            "car", "bike", "auto", "vehicle", "bmw", "audi", "mercedes", "honda",
+            "toyota", "hyundai", "tata", "mahindra", "suzuki", "yamaha", "ktm",
+            "bullet", "motor", "truck", "bus", "scooter", "drive", "ride", "traffic",
+            "road", "transport", "engine", "wheel", "garage"
+        )
+        return vehicleKeywords.any { nameLower.contains(it) || pathLower.contains(it) }
     }
 
     fun openCategoryDrillDown(category: ViewCategoryType) {
@@ -347,6 +419,8 @@ class ViewViewModel @Inject constructor(
                 ViewCategoryType.ARCHIVES -> allFiles.filter { it.category == FileCategory.ARCHIVE }
             }
 
+            rawCategoryFiles = filtered
+
             val title = when (category) {
                 ViewCategoryType.PHOTOS -> "Images & Photos"
                 ViewCategoryType.SCREENSHOTS -> "Screenshots"
@@ -358,10 +432,27 @@ class ViewViewModel @Inject constructor(
                 ViewCategoryType.ARCHIVES -> "Archives & Zips"
             }
 
+            val initialClassification = if (category == ViewCategoryType.PHOTOS) {
+                ImageClassification.ALL
+            } else if (category == ViewCategoryType.SCREENSHOTS) {
+                ImageClassification.SCREENSHOTS
+            } else {
+                ImageClassification.ALL
+            }
+
             _uiState.value = _uiState.value.copy(
                 activeDrillDownTitle = title,
+                activeImageClassification = initialClassification,
+                showPeopleFolder = false,
+                selectedPersonClusterId = null,
                 activeDrillDownFiles = sortFiles(filtered, _uiState.value.currentSortOption)
             )
+
+            if (category == ViewCategoryType.PHOTOS) {
+                if (_uiState.value.faceClusters.isEmpty() && !_uiState.value.isFaceScanning) {
+                    scanFacesNow()
+                }
+            }
         }
     }
 
@@ -464,8 +555,13 @@ class ViewViewModel @Inject constructor(
                 CollectionType.TELEGRAM_MEDIA -> "Telegram Media"
             }
 
+            rawCategoryFiles = filtered
+
             _uiState.value = _uiState.value.copy(
                 activeDrillDownTitle = title,
+                activeImageClassification = ImageClassification.ALL,
+                showPeopleFolder = false,
+                selectedPersonClusterId = null,
                 activeDrillDownFiles = sortFiles(filtered, _uiState.value.currentSortOption)
             )
         }
@@ -527,28 +623,32 @@ class ViewViewModel @Inject constructor(
     }
 
     fun closeDrillDown() {
+        rawCategoryFiles = emptyList()
         _uiState.value = _uiState.value.copy(
             activeDrillDownTitle = null,
             activeDrillDownFiles = emptyList(),
+            activeImageClassification = ImageClassification.ALL,
             showPeopleFolder = false,
             selectedPersonClusterId = null
         )
     }
 
     fun openPeopleFolder() {
-        _uiState.value = _uiState.value.copy(showPeopleFolder = true, selectedPersonClusterId = null)
-        if (_uiState.value.faceClusters.isEmpty() && !_uiState.value.isFaceScanning) {
-            scanFacesNow()
-        }
+        setImageClassification(ImageClassification.PEOPLE)
     }
 
     fun scanFacesNow() {
         viewModelScope.launch {
+            if (_uiState.value.isFaceScanning) return@launch
             _uiState.value = _uiState.value.copy(
                 isFaceScanning = true,
                 faceScanProgressText = "Analyzing photos with Google ML Kit..."
             )
             withContext(Dispatchers.IO) {
+                // If there are already faces in DB, cluster and refresh them immediately!
+                runClusteringInternal()
+                refreshClustersInState()
+
                 var allPhotos = fileRepository.getAllFiles().filter {
                     it.category == FileCategory.IMAGE_PHOTO || it.category == FileCategory.IMAGE_SCREENSHOT
                 }
@@ -556,11 +656,26 @@ class ViewViewModel @Inject constructor(
                     allPhotos = _uiState.value.mediaItems.filter { !it.isVideo }.map { it.toFileItem() }
                 }
 
-                val total = allPhotos.size
-                for ((idx, photo) in allPhotos.withIndex()) {
+                // Prioritize Camera / DCIM and Pictures first!
+                val prioritized = allPhotos.sortedByDescending { photo ->
+                    val p = photo.path.lowercase(Locale.ROOT)
+                    when {
+                        p.contains("/dcim/") || p.contains("/camera/") -> 100
+                        p.contains("/pictures/") || p.contains("/whatsapp") -> 50
+                        else -> 10
+                    }
+                }
+
+                val existingFaces = faceClusterDao.getAllFaces()
+                val processedPaths = existingFaces.map { it.imagePath }.toSet()
+                val toProcess = prioritized.filter { it.path !in processedPaths }
+
+                val total = toProcess.size
+                var newFacesFound = 0
+                for ((idx, photo) in toProcess.withIndex()) {
                     val file = File(photo.path)
                     if (file.exists() && file.canRead()) {
-                        if (idx % 3 == 0) {
+                        if (idx % 5 == 0) {
                             _uiState.value = _uiState.value.copy(
                                 faceScanProgressText = "Scanning photo ${idx + 1} of $total..."
                             )
@@ -575,32 +690,61 @@ class ViewViewModel @Inject constructor(
                                 personClusterId = -1
                             )
                             faceClusterDao.insertFace(entity)
+                            newFacesFound++
+                        }
+
+                        // Run incremental clustering every 15 faces found
+                        if (newFacesFound > 0 && newFacesFound % 15 == 0) {
+                            runClusteringInternal()
+                            refreshClustersInState()
                         }
                     }
                 }
 
-                _uiState.value = _uiState.value.copy(
-                    faceScanProgressText = "Grouping detected faces..."
-                )
-                val unclustered = faceClusterDao.getUnclusteredFaces()
-                if (unclustered.isNotEmpty()) {
-                    val floatEmbeddings = unclustered.map { entity ->
-                        val buffer = ByteBuffer.wrap(entity.faceEmbedding).order(ByteOrder.BIG_ENDIAN).asFloatBuffer()
-                        val array = FloatArray(buffer.capacity())
-                        buffer.get(array)
-                        Pair(entity.id, array)
-                    }
-                    val clusters = faceClusterer.clusterFaces(floatEmbeddings)
-                    for ((clusterId, faceIds) in clusters) {
-                        for (id in faceIds) {
-                            faceClusterDao.updateClusterId(id, clusterId)
-                        }
-                    }
+                // Final clustering pass
+                runClusteringInternal()
+                refreshClustersInState()
+            }
+
+            _uiState.value = _uiState.value.copy(
+                isFaceScanning = false,
+                faceScanProgressText = ""
+            )
+        }
+    }
+
+    private suspend fun runClusteringInternal() {
+        try {
+            val allFaces = faceClusterDao.getAllFaces()
+            if (allFaces.isEmpty()) return
+
+            val floatEmbeddings = allFaces.map { entity ->
+                val buffer = ByteBuffer.wrap(entity.faceEmbedding).order(ByteOrder.BIG_ENDIAN).asFloatBuffer()
+                val array = FloatArray(buffer.capacity())
+                buffer.get(array)
+                Pair(entity.id, array)
+            }
+            val clusters = faceClusterer.clusterFaces(floatEmbeddings)
+            for ((clusterId, faceIds) in clusters) {
+                for (id in faceIds) {
+                    faceClusterDao.updateClusterId(id, clusterId)
                 }
             }
-            _uiState.value = _uiState.value.copy(isFaceScanning = false, faceScanProgressText = "")
-            loadData()
+        } catch (e: Exception) {
+            // Graceful fallback
         }
+    }
+
+    private suspend fun refreshClustersInState() {
+        val clusterIds = faceClusterDao.getAllPersonClusterIds()
+        val clusterMap = mutableMapOf<Int, List<FaceClusterEntity>>()
+        for (id in clusterIds) {
+            val faces = faceClusterDao.getFacesForPerson(id)
+            if (faces.isNotEmpty()) {
+                clusterMap[id] = faces
+            }
+        }
+        _uiState.value = _uiState.value.copy(faceClusters = clusterMap)
     }
 
     fun selectPersonCluster(clusterId: Int?) {
@@ -611,7 +755,7 @@ class ViewViewModel @Inject constructor(
         if (_uiState.value.selectedPersonClusterId != null) {
             _uiState.value = _uiState.value.copy(selectedPersonClusterId = null)
         } else {
-            _uiState.value = _uiState.value.copy(showPeopleFolder = false)
+            setImageClassification(ImageClassification.ALL)
         }
     }
 
