@@ -41,6 +41,27 @@ class SearchDao @Inject constructor(
         }
     }
 
+    suspend fun indexBatchFilenames(items: List<Pair<Long, String>>) {
+        if (items.isEmpty()) return
+        val writableDb = db
+        writableDb.beginTransaction()
+        try {
+            val stmt = writableDb.compileStatement(
+                "INSERT INTO file_fts (file_id, filename, content, page_number) VALUES (?, ?, ?, '1')"
+            )
+            for ((fileId, filename) in items) {
+                stmt.bindString(1, fileId.toString())
+                stmt.bindString(2, filename)
+                stmt.bindString(3, filename)
+                stmt.executeInsert()
+            }
+            stmt.close()
+            writableDb.setTransactionSuccessful()
+        } finally {
+            writableDb.endTransaction()
+        }
+    }
+
     suspend fun indexImageOcr(fileId: Long, filename: String, ocrText: String) {
         val writableDb = db
         writableDb.execSQL(
