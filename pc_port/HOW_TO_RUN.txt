@@ -1,0 +1,52 @@
+========================================================================
+             StorageSense PC Port — How to Run (1-Click Launchers)
+========================================================================
+
+You do NOT need to remember or type long commands. There are 3 simple,
+1-click ways to run StorageSense:
+
+------------------------------------------------------------------------
+Option 1: Desktop Shortcut (Easiest!)
+------------------------------------------------------------------------
+Double-click "Create_Desktop_Shortcut.bat" once in this folder.
+An icon called "StorageSense" will appear on your Windows Desktop.
+Simply double-click it anytime to start the AI engine and open the 
+Web Dashboard in your browser (http://localhost:8501)!
+
+------------------------------------------------------------------------
+Option 2: 1-Click Graphical Web Dashboard
+------------------------------------------------------------------------
+Double-click:
+   👉 Start_StorageSense.bat
+
+It starts the on-device AI engine, launches the Streamlit Web UI,
+and opens your browser automatically.
+
+------------------------------------------------------------------------
+Option 3: Interactive CLI Assistant
+------------------------------------------------------------------------
+If you prefer a fast, numbered terminal menu without opening a browser:
+Double-click:
+   👉 StorageSense_Assistant.bat
+
+Menu Options:
+   [1] Open Desktop Dashboard (Web UI in Browser)
+   [2] View Live System Telemetry (RAM, Drive, Ollama status)
+   [3] Scan & Index a Folder
+   [4] Search Files with AI Synthesis
+   [5] Scan for Duplicate Files (Exact, Semantic & Images)
+   [6] Propose Space Cleanup
+   [7] Exit
+
+------------------------------------------------------------------------
+Command-Line Usage (Optional):
+------------------------------------------------------------------------
+- Web App:   python run_app.py
+- Search:    python run_cli.py --search "your query"
+- Dedup:     python run_cli.py --dedup
+- Clean:     python run_cli.py --clean 1.0
+- Telemetry: python run_cli.py --telemetry
+
+========================================================================
+            100% Local & Private — Zero Data Leaves Your PC
+========================================================================

@@ -17,4 +17,22 @@ captures
 stitch_design/
 *.png
 !docs/assets/logo.png
-pc_port/
+
+# Python & PC Port artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+chroma_db/
+.cache/
+.trash/
+logs/
+*.log
+.env
+.venv/
+venv/
+env/
