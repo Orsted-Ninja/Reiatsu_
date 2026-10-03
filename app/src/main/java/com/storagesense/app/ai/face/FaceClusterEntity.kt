@@ -8,5 +8,7 @@ data class FaceClusterEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val imagePath: String,
     val faceEmbedding: ByteArray, // Store as ByteArray of FloatArray
-    val personClusterId: Int = -1 // -1 means unclustered
+    val personClusterId: Int = -1, // -1 means unclustered
+    val personName: String? = null,
+    val thumbnailPath: String? = null
 )

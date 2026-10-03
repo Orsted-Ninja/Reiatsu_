@@ -3,7 +3,7 @@ package com.storagesense.app.ai.face
 import kotlin.math.min
 import kotlin.math.sqrt
 
-class FaceClusterer(private val threshold: Float = 0.58f) {
+class FaceClusterer(private val threshold: Float = 0.60f) {
     
     /**
      * Groups face embeddings into clusters based on cosine similarity.

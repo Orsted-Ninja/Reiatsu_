@@ -35,6 +35,15 @@ interface FaceClusterDao {
     @Query("SELECT EXISTS(SELECT 1 FROM face_clusters WHERE imagePath = :path LIMIT 1)")
     suspend fun hasFaceForPath(path: String): Boolean
 
+    @Query("UPDATE face_clusters SET personName = :name WHERE personClusterId = :clusterId")
+    suspend fun updatePersonName(clusterId: Int, name: String)
+
+    @Query("UPDATE face_clusters SET thumbnailPath = :thumbnailPath WHERE id = :id")
+    suspend fun updateThumbnailPath(id: Long, thumbnailPath: String)
+
+    @Query("SELECT * FROM face_clusters WHERE personName LIKE '%' || :nameQuery || '%'")
+    suspend fun searchFacesByPersonName(nameQuery: String): List<FaceClusterEntity>
+
     @Query("DELETE FROM face_clusters")
     suspend fun clearAll()
 }

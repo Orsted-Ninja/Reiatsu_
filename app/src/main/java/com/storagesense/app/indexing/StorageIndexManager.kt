@@ -258,14 +258,15 @@ class StorageIndexManager @Inject constructor(
                                 try {
                                     val faces = faceDetectionEngine.detectFacesInFile(java.io.File(doc.path))
                                     for (face in faces) {
-                                        val embedding = face.landmarkEmbedding
+                                        val embedding = face.embedding
                                         val buffer = ByteBuffer.allocate(embedding.size * 4)
                                         buffer.asFloatBuffer().put(embedding)
                                         faceClusterDao.insertFace(
                                             com.storagesense.app.ai.face.FaceClusterEntity(
                                                 imagePath = doc.path,
                                                 faceEmbedding = buffer.array(),
-                                                personClusterId = -1
+                                                personClusterId = -1,
+                                                thumbnailPath = face.thumbnailPath
                                             )
                                         )
                                     }

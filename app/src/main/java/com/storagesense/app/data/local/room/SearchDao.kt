@@ -148,6 +148,39 @@ class SearchDao @Inject constructor(
         val hasDeepLearning = searchTokens.any { it.equals("deep", ignoreCase = true) } &&
                 searchTokens.any { it.equals("learning", ignoreCase = true) }
 
+        // Stage 0: Direct exact or prefix filename match
+        try {
+            val trimmedRaw = rawQuery.trim().lowercase()
+            val queryWithoutExt = trimmedRaw.substringBeforeLast(".")
+            val directCursor = db.query(
+                "SELECT id, name, path FROM file_metadata WHERE lower(name) = ? OR lower(name) LIKE ? OR lower(name) LIKE ? LIMIT 10",
+                arrayOf(trimmedRaw, "$queryWithoutExt.%", "%$queryWithoutExt%")
+            )
+            directCursor.use {
+                val idCol = it.getColumnIndex("id")
+                val nameCol = it.getColumnIndex("name")
+                while (it.moveToNext()) {
+                    val fid = it.getLong(idCol)
+                    val fname = it.getString(nameCol) ?: ""
+                    val fLower = fname.lowercase()
+                    val score = if (fLower == trimmedRaw || fLower.substringBeforeLast(".") == queryWithoutExt) {
+                        1200.0f
+                    } else if (fLower.startsWith(queryWithoutExt)) {
+                        800.0f
+                    } else {
+                        450.0f
+                    }
+                    resultsMap[fid] = FtsMatch(
+                        fileId = fid,
+                        filename = fname,
+                        snippet = "Exact match: $fname",
+                        bm25Score = score,
+                        pageNumber = 1
+                    )
+                }
+            }
+        } catch (_: Exception) {}
+
         // Stage 1: Direct file_metadata filename search
         try {
             if (isAadharQuery) {
@@ -163,7 +196,7 @@ class SearchDao @Inject constructor(
                             fileId = fid,
                             filename = fname,
                             snippet = "Identity Document: $fname",
-                            bm25Score = 250.0f,
+                            bm25Score = 350.0f,
                             pageNumber = 1
                         )
                     }
@@ -180,7 +213,7 @@ class SearchDao @Inject constructor(
                         val fid = it.getLong(idCol)
                         val fname = it.getString(nameCol) ?: ""
                         val nameLower = fname.lowercase()
-                        var score = 160.0f
+                        var score = 260.0f
                         if (nameLower.contains("mod") || nameLower.contains("module") || nameLower.contains("unit") || nameLower.contains("lecture") || nameLower.contains("note")) {
                             score += 70.0f
                         }
@@ -222,7 +255,8 @@ class SearchDao @Inject constructor(
                         val fid = it.getLong(idCol)
                         val fname = it.getString(nameCol) ?: ""
                         val nameLower = fname.lowercase()
-                        var score = 50.0f
+                        val allMatch = searchTokens.all { tok -> nameLower.contains(tok.lowercase()) }
+                        var score = if (allMatch) 500.0f else 250.0f
                         if (isNotesQuery && (nameLower.contains("mod") || nameLower.contains("module") || nameLower.contains("unit") || nameLower.contains("lecture") || nameLower.contains("note"))) {
                             score += 80.0f
                         }

@@ -685,12 +685,13 @@ class ViewViewModel @Inject constructor(
                         }
                         val detectedFaces = faceDetectionEngine.detectFacesInFile(file)
                         for (face in detectedFaces) {
-                            val buffer = ByteBuffer.allocate(face.landmarkEmbedding.size * 4)
-                            buffer.asFloatBuffer().put(face.landmarkEmbedding)
+                            val buffer = ByteBuffer.allocate(face.embedding.size * 4)
+                            buffer.asFloatBuffer().put(face.embedding)
                             val entity = FaceClusterEntity(
                                 imagePath = file.absolutePath,
                                 faceEmbedding = buffer.array(),
-                                personClusterId = -1
+                                personClusterId = -1,
+                                thumbnailPath = face.thumbnailPath
                             )
                             faceClusterDao.insertFace(entity)
                             newFacesFound++

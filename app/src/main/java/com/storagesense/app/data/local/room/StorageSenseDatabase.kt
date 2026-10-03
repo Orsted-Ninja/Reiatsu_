@@ -19,7 +19,7 @@ import com.storagesense.app.data.local.room.entity.ImageIndexEntity
         ActionLogEntity::class,
         com.storagesense.app.ai.face.FaceClusterEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -32,6 +32,13 @@ abstract class StorageSenseDatabase : RoomDatabase() {
 
     companion object {
         private const val DB_NAME = "storagesense.db"
+
+        private val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE face_clusters ADD COLUMN personName TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE face_clusters ADD COLUMN thumbnailPath TEXT DEFAULT NULL")
+            }
+        }
 
         @Volatile
         private var INSTANCE: StorageSenseDatabase? = null
@@ -73,6 +80,7 @@ abstract class StorageSenseDatabase : RoomDatabase() {
                             )
                         }
                     })
+                    .addMigrations(MIGRATION_5_6)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

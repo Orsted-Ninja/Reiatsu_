@@ -509,13 +509,34 @@ class ChatViewModel @Inject constructor(
     }
 
     private suspend fun summarizeDocumentOrTopic(query: String) {
-        val results = hybridSearchUseCase(query = query, limit = 5)
-        if (results.isEmpty()) {
-            addAssistantMessage("I searched your storage for **\"$query\"**, but didn't find any matching documents or files to summarize. Try checking the file name or re-indexing in Settings.")
-            return
+        val cleanQ = query.trim().lowercase()
+        val queryBaseName = cleanQ.substringBeforeLast(".")
+
+        val allIndexedFiles = fileRepository.getAllFiles()
+        val directFileMatch = allIndexedFiles.firstOrNull { file ->
+            val fLower = file.name.lowercase()
+            fLower == cleanQ || fLower.substringBeforeLast(".") == queryBaseName
+        } ?: allIndexedFiles.firstOrNull { file ->
+            val fLower = file.name.lowercase()
+            fLower.contains(queryBaseName) && queryBaseName.length >= 4
         }
 
-        val targetResult = results.first()
+        val targetResult = if (directFileMatch != null) {
+            SearchResult(
+                file = directFileMatch,
+                matchedSnippet = "Exact document match: ${directFileMatch.name}",
+                score = 1.0f,
+                source = SearchSource.METADATA
+            )
+        } else {
+            val results = hybridSearchUseCase(query = query, limit = 5)
+            if (results.isEmpty()) {
+                addAssistantMessage("I searched your storage for **\"$query\"**, but didn't find any matching documents or files to summarize. Try checking the file name or re-indexing in Settings.")
+                return
+            }
+            results.first()
+        }
+
         val targetFile = targetResult.file
         recentFilesHelper.recordOpened(targetFile.path)
 

@@ -17,20 +17,22 @@ object FaceModule {
 
     @Provides
     @Singleton
-    fun provideFaceDetectionEngine(@ApplicationContext context: Context): FaceDetectionEngine {
-        return FaceDetectionEngine(context)
+    fun provideFaceEmbeddingEngine(@ApplicationContext context: Context): FaceEmbeddingEngine {
+        return FaceEmbeddingEngine(context)
     }
 
     @Provides
     @Singleton
-    fun provideFaceEmbeddingEngine(): FaceEmbeddingEngine {
-        val path = "/sdcard/StorageSense/models/mobilefacenet.onnx"
-        return FaceEmbeddingEngine(path)
+    fun provideFaceDetectionEngine(
+        @ApplicationContext context: Context,
+        faceEmbeddingEngine: FaceEmbeddingEngine
+    ): FaceDetectionEngine {
+        return FaceDetectionEngine(context, faceEmbeddingEngine)
     }
 
     @Provides
     @Singleton
     fun provideFaceClusterer(): FaceClusterer {
-        return FaceClusterer(threshold = 0.58f)
+        return FaceClusterer(threshold = 0.60f)
     }
 }

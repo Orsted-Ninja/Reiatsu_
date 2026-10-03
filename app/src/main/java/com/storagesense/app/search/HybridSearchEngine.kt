@@ -43,7 +43,15 @@ class HybridSearchEngine @Inject constructor(
         if (bm25Results.isEmpty()) return@coroutineScope vectorResults.take(limit)
         if (vectorResults.isEmpty()) return@coroutineScope bm25Results.take(limit)
 
-        RrfFusion.fuse(listOf(bm25Results, vectorResults), limit = limit)
+        val fused = RrfFusion.fuse(listOf(bm25Results, vectorResults), limit = limit)
+        val topBm25 = bm25Results.firstOrNull()
+        if (topBm25 != null && (topBm25.matchedSnippet?.startsWith("Exact match:") == true || topBm25.score >= 0.995f)) {
+            val list = fused.toMutableList()
+            list.removeAll { it.file.id == topBm25.file.id }
+            listOf(topBm25) + list.take(limit - 1)
+        } else {
+            fused
+        }
     }
 
     /**

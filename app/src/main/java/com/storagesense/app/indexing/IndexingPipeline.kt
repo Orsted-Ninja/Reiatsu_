@@ -184,16 +184,15 @@ class IndexingPipeline @Inject constructor(
         try {
             val detectedFaces = faceDetectionEngine.detectFacesInFile(file)
             for (face in detectedFaces) {
-                // Try ONNX embedding if present, else fallback directly to Google ML Kit geometric embedding
-                val embedding = face.cropBitmap?.let { faceEmbeddingEngine.getEmbedding(it) } ?: face.landmarkEmbedding
-
+                val embedding = face.embedding
                 val buffer = java.nio.ByteBuffer.allocate(embedding.size * 4)
                 buffer.asFloatBuffer().put(embedding)
                 
                 val entity = FaceClusterEntity(
                     imagePath = file.absolutePath,
                     faceEmbedding = buffer.array(),
-                    personClusterId = -1 // Unclustered
+                    personClusterId = -1, // Unclustered
+                    thumbnailPath = face.thumbnailPath
                 )
                 faceClusterDao.insertFace(entity)
             }
