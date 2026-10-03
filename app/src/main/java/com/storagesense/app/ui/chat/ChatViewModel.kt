@@ -74,7 +74,7 @@ class ChatViewModel @Inject constructor(
     init {
         // Initial greeting
         addAssistantMessage(
-            "Hello! I am **StorageSense**, your on-device AI storage assistant.\n\n" +
+            "Hello! I am **Reiatsu**, your on-device AI storage assistant.\n\n" +
                     "I understand what's on your phone and help you make sense of it.\n" +
                     "Try asking me:\n" +
                     "• *\"What is taking up space?\"*\n" +
@@ -362,15 +362,15 @@ class ChatViewModel @Inject constructor(
 
             is StorageIntent.Help -> {
                 if (intent.topic == "undo") {
-                    val helpText = "🔄 **How to Undo Deletions & Actions in StorageSense**:\n\n" +
-                            "StorageSense uses a **Reversible Trash Staging Engine**. When files are removed:\n\n" +
+                    val helpText = "🔄 **How to Undo Deletions & Actions in Reiatsu**:\n\n" +
+                            "Reiatsu uses a **Reversible Trash Staging Engine**. When files are removed:\n\n" +
                             "1. **Undo Button (⮌)**: Tap the **Undo icon** in the top-right toolbar of the Chat or Dashboard screen anytime.\n" +
                             "2. **Instant Undo Snackbar**: When deleting files from the Dashboard, an **\"UNDO\"** button appears at the bottom of the screen.\n" +
                             "3. **Chat Command**: Just type *\"undo\"*, *\"undo last deletion\"*, or *\"restore\"* in this chat.\n\n" +
                             "*(All deleted files are safely preserved in `~/.storagesense/trash/` for 30 days and restored to their original folders with one tap.)*"
                     addAssistantMessage(helpText)
                 } else {
-                    addAssistantMessage("I am StorageSense, your on-device AI assistant. Ask me to find files, free up space, or remove duplicates.")
+                    addAssistantMessage("I am Reiatsu, your on-device AI assistant. Ask me to find files, free up space, or remove duplicates.")
                 }
             }
 

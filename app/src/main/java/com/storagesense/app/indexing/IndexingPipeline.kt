@@ -129,9 +129,14 @@ class IndexingPipeline @Inject constructor(
 
             var contentText = extraction.fullText
             if ((extraction.needsOcrFallback || contentText.length < 50) && fileItem.category == FileCategory.DOCUMENT_PDF) {
-                val ocr = ocrEngine.recognizePdf(file, maxPages = 2)
-                if (ocr.fullText.isNotBlank()) {
-                    contentText = ocr.fullText
+                val isTargetIdentity = fileItem.name.contains("aadhar", ignoreCase = true) ||
+                        fileItem.name.contains("aadhaar", ignoreCase = true) ||
+                        fileItem.name.contains("pan", ignoreCase = true)
+                if (isTargetIdentity && file.length() < 10L * 1024L * 1024L) {
+                    val ocr = ocrEngine.recognizePdf(file, maxPages = 1)
+                    if (ocr.fullText.isNotBlank()) {
+                        contentText = ocr.fullText
+                    }
                 }
             }
 

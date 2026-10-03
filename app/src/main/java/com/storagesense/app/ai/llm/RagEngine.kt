@@ -141,18 +141,24 @@ class RagEngine @Inject constructor(
                 query.contains("what is in", ignoreCase = true) ||
                 query.contains("overview of", ignoreCase = true)
 
+
         if (isExplicitSummaryRequest && primaryContent.isNotBlank()) {
+            val digest = buildRepresentativeDigest(primaryContent)
+
             if (onDeviceLlmEngine.isModelAvailable()) {
-                val truncatedContent = if (primaryContent.length > 3500) primaryContent.take(3500) + "\n...[truncated]..." else primaryContent
                 val prompt = """
                     <start_of_turn>user
-                    You are StorageSense, an on-device document assistant running locally on Android.
-                    Summarize the following content from "${topResult.file.name}" to address the request: "$query".
-                    Highlight key takeaways, main concepts, or formulas concisely under 150 words.
+                    You are Reiatsu, an intelligent on-device document assistant running locally on Android.
+                    Summarize the following representative content from "${topResult.file.name}" to address the request: "$query".
+                    Structure your summary clearly:
+                    1. 📌 Overview & Core Objective
+                    2. 🔑 Key Concepts & Findings
+                    3. 💡 Main Takeaways
+                    Keep the response concise and under 200 words.
 
-                    Content:
+                    Content Digest:
                     \"\"\"
-                    $truncatedContent
+                    $digest
                     \"\"\"
 
                     Summary:<end_of_turn>
@@ -174,27 +180,9 @@ class RagEngine @Inject constructor(
                 }
             }
 
-            // Extractive fallback when LLM is not loaded
-            val lines = primaryContent.split(Regex("(?<=[.!?\\n])\\s+"))
-                .map { it.trim() }
-                .filter { it.length > 20 && !it.startsWith("http") && !it.startsWith("doi") }
-                .distinct()
-                .take(6)
-
-            val sb = StringBuilder()
-            sb.append("📄 **Summary of ${topResult.file.name}**:\n\n")
-            if (lines.isNotEmpty()) {
-                for (line in lines) {
-                    val cleanLine = line.replace(Regex("^[•\\-→*\\d.]+\\s*"), "")
-                    if (cleanLine.isNotBlank()) {
-                        sb.append("• ${cleanLine.trimEnd('.')}.\n")
-                    }
-                }
-            } else {
-                sb.append(primaryContent.take(300) + "...\n")
-            }
-            sb.append("\n*(Extracted from indexed document chunks • Tap card below to open)*\n")
-            emit(sb.toString())
+            // Structured generator fallback when LLM is not loaded
+            val summaryText = generateStructuredSummary(topResult.file, primaryContent)
+            emit(summaryText)
             return@flow
         }
 
@@ -240,6 +228,7 @@ class RagEngine @Inject constructor(
 
     /**
      * Generates a concise on-device AI summary of a specific document's contents.
+     * Takes introductory sections ("a few of the top") plus key body and conclusion excerpts.
      */
     fun streamDocumentSummary(
         file: FileItem,
@@ -251,18 +240,22 @@ class RagEngine @Inject constructor(
             return@flow
         }
 
+        val digest = buildRepresentativeDigest(content)
+
         if (onDeviceLlmEngine.isModelAvailable()) {
-            val truncatedContent = if (content.length > 3500) content.take(3500) + "\n...[truncated]..." else content
             val prompt = """
                 <start_of_turn>user
-                You are StorageSense, an intelligent on-device document assistant running locally on Android.
-                Provide a structured, concise summary of this document ("${file.name}").
-                Highlight key takeaways, main concepts, formulas, or facts.
-                Keep it under 150 words.
+                You are Reiatsu, an intelligent on-device document assistant running locally on Android.
+                Provide a structured, comprehensive summary of this document ("${file.name}").
+                Structure your response into:
+                1. 📌 Overview & Core Objective
+                2. 🔑 Key Concepts, Findings & Details
+                3. 💡 Main Takeaways
+                Keep it concise and under 200 words.
 
-                Document Content:
+                Document Digest:
                 \"\"\"
-                $truncatedContent
+                $digest
                 \"\"\"
 
                 Summary:<end_of_turn>
@@ -276,35 +269,130 @@ class RagEngine @Inject constructor(
                     emit(token)
                 }
             } catch (_: Exception) {
-                // Fallback to extractive summary
+                // Fallback to structured extractive summary
             }
 
-            if (emittedAny) return@flow
+            if (emittedAny) {
+                val modelName = onDeviceLlmEngine.getDetectedModelName() ?: "LLM"
+                emit("\n\n*(Summarized by on-device $modelName)*")
+                return@flow
+            }
         }
 
-        // Extractive fallback when LLM model is not loaded
-        val lines = content.split(Regex("(?<=[.!?\\n])\\s+"))
+        // Structured synthesis generator when LLM is not loaded
+        val summaryText = generateStructuredSummary(file, content)
+        emit(summaryText)
+    }
+
+    /**
+     * Intelligently samples from the document:
+     * - Top introductory section (~1400 chars) for title, abstract, and core objective
+     * - Core middle section (~1200 chars) for body findings and methods
+     * - Concluding section (~1000 chars) for final takeaways and results
+     */
+    private fun buildRepresentativeDigest(rawText: String): String {
+        val trimmed = rawText.trim()
+        if (trimmed.length <= 3600) return trimmed
+
+        val topPortion = trimmed.take(1400).trimEnd()
+        val remaining = trimmed.drop(1400)
+
+        val middleStart = (remaining.length / 2 - 600).coerceAtLeast(0)
+        val middleEnd = (middleStart + 1200).coerceAtMost(remaining.length)
+        val middlePortion = if (middleEnd > middleStart) {
+            remaining.substring(middleStart, middleEnd).trim()
+        } else ""
+
+        val endPortion = trimmed.takeLast(1000).trimStart()
+
+        val sb = StringBuilder()
+        sb.append(topPortion)
+        if (middlePortion.isNotBlank()) {
+            sb.append("\n\n[... Core Body Excerpt ...]\n")
+            sb.append(middlePortion)
+        }
+        if (endPortion.isNotBlank()) {
+            sb.append("\n\n[... Concluding Summary & Takeaways ...]\n")
+            sb.append(endPortion)
+        }
+        return sb.toString()
+    }
+
+    /**
+     * Generates a high-quality, structured executive summary when the LLM is not loaded.
+     * Takes top introductory context and key informational sentences across the entire document.
+     */
+    private fun generateStructuredSummary(file: FileItem, content: String): String {
+        val sentences = content.split(Regex("(?<=[.!?\\n])\\s+"))
             .map { it.trim() }
-            .filter { it.length > 20 && !it.startsWith("http") }
+            .filter { line ->
+                line.length in 25..350 &&
+                        !line.startsWith("http", ignoreCase = true) &&
+                        !line.startsWith("doi:", ignoreCase = true) &&
+                        !line.contains("Page ", ignoreCase = true) &&
+                        !line.contains("All rights reserved", ignoreCase = true)
+            }
+            .distinct()
+
+        val sb = StringBuilder()
+        sb.append("📄 **Executive Summary: ${file.name}**\n\n")
+
+        // 1. Overview: Pick 1-2 clean sentences from the top
+        val topSentences = sentences.take(4).map { it.replace(Regex("^[•\\-→*\\d.]+\\s*"), "").trim() }
+            .filter { it.isNotBlank() }
+        val overview = if (topSentences.isNotEmpty()) {
+            topSentences.take(2).joinToString(" ") { it.trimEnd('.') + "." }
+        } else {
+            content.take(200).trim() + "..."
+        }
+
+        sb.append("📌 **Overview & Core Objective**:\n")
+        sb.append("$overview\n\n")
+
+        // 2. Key Highlights: Informative scoring across body & conclusion
+        val keyKeywords = listOf(
+            "propose", "method", "system", "result", "found", "show", "analy", "key",
+            "feature", "design", "model", "develop", "conclud", "importan", "percent", "%",
+            "increas", "decreas", "benefit", "requir", "evaluat", "perform", "solut"
+        )
+
+        val candidateSentences = sentences.drop(2)
+        val scored = candidateSentences.map { s ->
+            val lower = s.lowercase()
+            var score = 0
+            for (kw in keyKeywords) {
+                if (lower.contains(kw)) score += 2
+            }
+            if (s.any { it.isDigit() }) score += 1
+            if (s.startsWith("•") || s.startsWith("-") || s.startsWith("*")) score += 2
+            Pair(s, score)
+        }.sortedByDescending { it.second }
+
+        val highlights = scored.map { it.first }
+            .map { it.replace(Regex("^[•\\-→*\\d.]+\\s*"), "").trim() }
+            .filter { it.isNotBlank() && it.length > 30 }
             .distinct()
             .take(4)
 
-        val sb = StringBuilder()
-        sb.append("📄 **Summary of ${file.name}**\n\n")
-        if (lines.isNotEmpty()) {
-            for (line in lines) {
-                sb.append("• ${line.trimEnd('.')}.\n")
+        if (highlights.isNotEmpty()) {
+            sb.append("🔑 **Key Highlights & Main Takeaways**:\n")
+            for (h in highlights) {
+                sb.append("• ${h.trimEnd('.')}.\n")
             }
-        } else {
-            sb.append(content.take(280) + "...\n")
+            sb.append("\n")
         }
+
+        // 3. Document Scope & Guidance
+        sb.append("📊 **Document Scope**:\n")
+        sb.append("• Location: `${file.path}` (${file.formattedSize})\n")
 
         val modelName = onDeviceLlmEngine.getDetectedModelName()
         if (modelName != null) {
-            sb.append("\n*(Powered by on-device $modelName)*")
+            sb.append("*(Synthesized with on-device $modelName)*\n")
         } else {
-            sb.append("\n*(💡 Enable on-device Gemma LLM in Settings for generative multi-paragraph synthesis)*")
+            sb.append("*(💡 Copy a Gemma `.litertlm` or `.bin` model into `/sdcard/StorageSense/models/` for full multi-paragraph generative reasoning)*\n")
         }
-        emit(sb.toString())
+
+        return sb.toString()
     }
 }

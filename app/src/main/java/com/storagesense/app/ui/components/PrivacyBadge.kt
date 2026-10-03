@@ -176,7 +176,7 @@ fun PrivacySheet(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "StorageSense was designed from the ground up to never transmit your files, personal notes, images, or metadata to any remote servers. There is no cloud backend, no telemetry, and no account required.",
+                        text = "Reiatsu was designed from the ground up to never transmit your files, personal notes, images, or metadata to any remote servers. There is no cloud backend, no telemetry, and no account required.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp

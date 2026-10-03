@@ -693,10 +693,23 @@ fun ViewScreen(
                             .padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        val isSizeSelected = uiState.currentSortOption == SortOption.SIZE_DESC || uiState.currentSortOption == SortOption.SIZE_ASC
+                        val isSizeAsc = uiState.currentSortOption == SortOption.SIZE_ASC
+
+                        val isDateSelected = uiState.currentSortOption == SortOption.DATE_DESC || uiState.currentSortOption == SortOption.DATE_ASC
+                        val isDateAsc = uiState.currentSortOption == SortOption.DATE_ASC
+
+                        val isNameSelected = uiState.currentSortOption == SortOption.NAME_ASC || uiState.currentSortOption == SortOption.NAME_DESC
+                        val isNameDesc = uiState.currentSortOption == SortOption.NAME_DESC
+
                         FilterChip(
-                            selected = uiState.currentSortOption == SortOption.SIZE_DESC,
-                            onClick = { viewModel.setSortOption(SortOption.SIZE_DESC) },
-                            label = { Text("Size ↓", fontSize = 11.sp) },
+                            selected = isSizeSelected,
+                            onClick = {
+                                viewModel.setSortOption(
+                                    if (uiState.currentSortOption == SortOption.SIZE_DESC) SortOption.SIZE_ASC else SortOption.SIZE_DESC
+                                )
+                            },
+                            label = { Text(if (isSizeAsc) "Size ↑" else "Size ↓", fontSize = 11.sp) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = VaultPrimary.copy(alpha = 0.2f),
                                 selectedLabelColor = VaultPrimary,
@@ -705,9 +718,13 @@ fun ViewScreen(
                             )
                         )
                         FilterChip(
-                            selected = uiState.currentSortOption == SortOption.DATE_DESC,
-                            onClick = { viewModel.setSortOption(SortOption.DATE_DESC) },
-                            label = { Text("Date ↓", fontSize = 11.sp) },
+                            selected = isDateSelected,
+                            onClick = {
+                                viewModel.setSortOption(
+                                    if (uiState.currentSortOption == SortOption.DATE_DESC) SortOption.DATE_ASC else SortOption.DATE_DESC
+                                )
+                            },
+                            label = { Text(if (isDateAsc) "Date ↑" else "Date ↓", fontSize = 11.sp) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = VaultPrimary.copy(alpha = 0.2f),
                                 selectedLabelColor = VaultPrimary,
@@ -716,9 +733,13 @@ fun ViewScreen(
                             )
                         )
                         FilterChip(
-                            selected = uiState.currentSortOption == SortOption.NAME_ASC,
-                            onClick = { viewModel.setSortOption(SortOption.NAME_ASC) },
-                            label = { Text("Name A-Z", fontSize = 11.sp) },
+                            selected = isNameSelected,
+                            onClick = {
+                                viewModel.setSortOption(
+                                    if (uiState.currentSortOption == SortOption.NAME_ASC) SortOption.NAME_DESC else SortOption.NAME_ASC
+                                )
+                            },
+                            label = { Text(if (isNameDesc) "Name Z-A" else "Name A-Z", fontSize = 11.sp) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = VaultPrimary.copy(alpha = 0.2f),
                                 selectedLabelColor = VaultPrimary,
@@ -1050,7 +1071,7 @@ fun VaultTopBar(
     ) {
         Column {
             Text(
-                text = "StorageSense",
+                text = "Reiatsu",
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 color = VaultOnSurface
             )

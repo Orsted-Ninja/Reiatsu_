@@ -144,7 +144,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = "StorageSense has android.permission.INTERNET removed. Zero data, files, or embeddings can ever leave this physical device.",
+                            text = "Reiatsu has android.permission.INTERNET removed. Zero data, files, or embeddings can ever leave this physical device.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -182,7 +182,7 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
                         )
                         Text(
-                            text = "Files deleted in StorageSense are moved here first so they can be restored at any time.",
+                            text = "Files deleted in Reiatsu are moved here first so they can be restored at any time.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -238,7 +238,7 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Control which storage folders StorageSense accesses. Disabling large app media folders (like WhatsApp) prevents indexing 10,000+ unnecessary files and keeps your device smooth.",
+                            text = "Control which storage folders Reiatsu accesses. Disabling large app media folders (like WhatsApp) prevents indexing 10,000+ unnecessary files and keeps your device smooth.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

@@ -1,11 +1,17 @@
 package com.storagesense.app.ui.images
 
+import android.content.Context
+import android.provider.MediaStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.storagesense.app.ai.vision.ImageAnalyzer
+import com.storagesense.app.domain.model.FileCategory
 import com.storagesense.app.domain.model.FileItem
 import com.storagesense.app.domain.repository.FileRepository
+import com.storagesense.app.indexing.ScanPhase
+import com.storagesense.app.indexing.StorageIndexManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,12 +21,15 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
 class ImagesViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val fileRepository: FileRepository,
-    private val imageAnalyzer: ImageAnalyzer
+    private val imageAnalyzer: ImageAnalyzer,
+    private val storageIndexManager: StorageIndexManager
 ) : ViewModel() {
 
     private val _images = MutableStateFlow<List<FileItem>>(emptyList())
@@ -39,23 +48,87 @@ class ImagesViewModel @Inject constructor(
 
     init {
         loadImages()
+
+        // Reactively reload whenever storage index manager completes or updates
+        viewModelScope.launch {
+            storageIndexManager.progress.collect { prog ->
+                if (!prog.isRunning && prog.phase == ScanPhase.COMPLETED) {
+                    loadImages()
+                }
+            }
+        }
     }
 
     fun loadImages() {
         viewModelScope.launch {
-            val allFiles = withContext(Dispatchers.IO) {
-                fileRepository.getAllFiles()
+            val imageFiles = withContext(Dispatchers.IO) {
+                val dbAll = fileRepository.getAllFiles()
+                val dbImages = dbAll.filter { it.category == FileCategory.IMAGE_PHOTO || it.category == FileCategory.IMAGE_SCREENSHOT }
+                if (dbImages.isNotEmpty()) {
+                    dbImages.sortedByDescending { it.lastModifiedEpochMs }
+                } else {
+                    // Instant fallback: load directly from MediaStore so Images tab is NEVER empty
+                    queryMediaStoreImages()
+                }
             }
-            val imageFiles = withContext(Dispatchers.Default) {
-                allFiles.filter { it.category.name.startsWith("IMAGE") }
-                    .sortedByDescending { it.lastModifiedEpochMs }
-            }
+
             cachedAllImages = imageFiles
             filterAndDisplay(_selectedCategory.value)
 
-            // Auto-trigger background classification on newest images
+            // Auto-trigger background classification on newest unclassified images
             startBackgroundClassification(imageFiles)
         }
+    }
+
+    private fun queryMediaStoreImages(): List<FileItem> {
+        val list = mutableListOf<FileItem>()
+        val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.DATE_MODIFIED,
+            MediaStore.MediaColumns.DATA
+        )
+        try {
+            context.contentResolver.query(
+                uri,
+                projection,
+                null,
+                null,
+                "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+            )?.use { cursor ->
+                val nameCol = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
+                val sizeCol = cursor.getColumnIndex(MediaStore.MediaColumns.SIZE)
+                val dateCol = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
+                val dataCol = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
+
+                while (cursor.moveToNext() && list.size < 1500) {
+                    val path = if (dataCol != -1) cursor.getString(dataCol) else null
+                    if (path.isNullOrBlank()) continue
+                    val file = File(path)
+                    if (!file.exists() || !file.canRead()) continue
+
+                    val name = if (nameCol != -1) cursor.getString(nameCol) ?: file.name else file.name
+                    val size = if (sizeCol != -1) cursor.getLong(sizeCol) else file.length()
+                    val date = if (dateCol != -1) cursor.getLong(dateCol) * 1000L else file.lastModified()
+                    val ext = file.extension.lowercase()
+                    val isScreenshot = name.contains("screenshot", ignoreCase = true) || path.contains("screenshot", ignoreCase = true)
+
+                    list.add(
+                        FileItem(
+                            path = path,
+                            name = name,
+                            extension = ext,
+                            sizeBytes = size,
+                            lastModifiedEpochMs = date,
+                            category = if (isScreenshot) FileCategory.IMAGE_SCREENSHOT else FileCategory.IMAGE_PHOTO
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {}
+        return list
     }
 
     fun selectCategory(category: String) {
@@ -74,7 +147,7 @@ class ImagesViewModel @Inject constructor(
         classificationJob?.cancel()
         classificationJob = viewModelScope.launch(Dispatchers.Default) {
             val toClassify = images
-                .take(300) // Focus on the 300 newest user images first
+                .take(150) // Fast batch of 150 newest user photos
                 .filter { it.imageLabels.isEmpty() && !it.hasFaces }
 
             if (toClassify.isEmpty()) {
@@ -104,14 +177,14 @@ class ImagesViewModel @Inject constructor(
                     }
                     updatedCount++
 
-                    if (updatedCount % 3 == 0) {
+                    if (updatedCount % 4 == 0) {
                         filterAndDisplay(_selectedCategory.value)
                     }
                 }
                 yield()
             }
 
-            if (updatedCount % 3 != 0) {
+            if (updatedCount % 4 != 0) {
                 filterAndDisplay(_selectedCategory.value)
             }
             _isClassifying.value = false
@@ -192,10 +265,14 @@ class ImagesViewModel @Inject constructor(
         return when (category) {
             "All" -> allFiles
             "People" -> allFiles.filter { file ->
-                file.hasFaces || matchesCategory(file.imageLabels, peopleKeywords)
+                file.hasFaces || matchesCategory(file.imageLabels, peopleKeywords) ||
+                file.name.contains("selfie", ignoreCase = true) ||
+                file.name.contains("portrait", ignoreCase = true) ||
+                file.path.contains("selfie", ignoreCase = true) ||
+                file.path.contains("portrait", ignoreCase = true)
             }
             "Screenshot" -> allFiles.filter { file ->
-                file.category.name == "IMAGE_SCREENSHOT" ||
+                file.category == FileCategory.IMAGE_SCREENSHOT ||
                 file.path.contains("screenshot", ignoreCase = true) ||
                 file.name.contains("screenshot", ignoreCase = true) ||
                 file.imageLabels.any { label ->
@@ -206,19 +283,34 @@ class ImagesViewModel @Inject constructor(
                 }
             }
             "Pet" -> allFiles.filter { file ->
-                matchesCategory(file.imageLabels, petKeywords)
+                matchesCategory(file.imageLabels, petKeywords) ||
+                file.name.contains("dog", ignoreCase = true) ||
+                file.name.contains("cat", ignoreCase = true) ||
+                file.name.contains("pet", ignoreCase = true)
             }
             "Food" -> allFiles.filter { file ->
-                matchesCategory(file.imageLabels, foodKeywords, foodPhrases)
+                matchesCategory(file.imageLabels, foodKeywords, foodPhrases) ||
+                file.name.contains("food", ignoreCase = true) ||
+                file.name.contains("recipe", ignoreCase = true)
             }
             "Vehicle" -> allFiles.filter { file ->
-                matchesCategory(file.imageLabels, vehicleKeywords, vehiclePhrases)
+                matchesCategory(file.imageLabels, vehicleKeywords, vehiclePhrases) ||
+                file.name.contains("car", ignoreCase = true) ||
+                file.name.contains("bike", ignoreCase = true)
             }
             "Nature" -> allFiles.filter { file ->
                 matchesCategory(file.imageLabels, natureKeywords, naturePhrases)
             }
             "Text" -> allFiles.filter { file ->
-                matchesCategory(file.imageLabels, textKeywords)
+                matchesCategory(file.imageLabels, textKeywords) ||
+                file.name.contains("doc", ignoreCase = true) ||
+                file.name.contains("receipt", ignoreCase = true) ||
+                file.name.contains("invoice", ignoreCase = true) ||
+                file.name.contains("bill", ignoreCase = true) ||
+                file.name.contains("scan", ignoreCase = true) ||
+                file.name.contains("note", ignoreCase = true) ||
+                file.name.contains("aadhar", ignoreCase = true) ||
+                file.name.contains("pan", ignoreCase = true)
             }
             else -> allFiles
         }

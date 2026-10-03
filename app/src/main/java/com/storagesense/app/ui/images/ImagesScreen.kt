@@ -55,6 +55,10 @@ fun ImagesScreen(viewModel: ImagesViewModel) {
     
     val categories = listOf("All", "People", "Pet", "Food", "Text", "Vehicle", "Nature", "Screenshot")
 
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.loadImages()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()

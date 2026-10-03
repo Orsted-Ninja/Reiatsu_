@@ -76,8 +76,11 @@ enum class CollectionType {
 
 enum class SortOption {
     SIZE_DESC,
+    SIZE_ASC,
     DATE_DESC,
-    NAME_ASC
+    DATE_ASC,
+    NAME_ASC,
+    NAME_DESC
 }
 
 enum class ImageClassification(val label: String) {
@@ -1141,8 +1144,11 @@ class ViewViewModel @Inject constructor(
     private fun sortFiles(files: List<FileItem>, sort: SortOption): List<FileItem> {
         return when (sort) {
             SortOption.SIZE_DESC -> files.sortedByDescending { it.sizeBytes }
+            SortOption.SIZE_ASC -> files.sortedBy { it.sizeBytes }
             SortOption.DATE_DESC -> files.sortedByDescending { it.lastModifiedEpochMs }
+            SortOption.DATE_ASC -> files.sortedBy { it.lastModifiedEpochMs }
             SortOption.NAME_ASC -> files.sortedBy { it.name.lowercase(Locale.ROOT) }
+            SortOption.NAME_DESC -> files.sortedByDescending { it.name.lowercase(Locale.ROOT) }
         }
     }
 

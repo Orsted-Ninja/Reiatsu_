@@ -106,6 +106,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        imagesViewModel.loadImages()
+        viewViewModel.loadData()
         val now = System.currentTimeMillis()
         // Only re-trigger scan if 5+ minutes have passed since last trigger.
         // This prevents spurious rescans every time a bottom sheet or dialog is dismissed.

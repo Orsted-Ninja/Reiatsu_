@@ -50,6 +50,7 @@ class StorageIndexManager @Inject constructor(
     private val searchDao: SearchDao,
     private val chunkDao: DocumentChunkDao,
     private val imageAnalyzer: ImageAnalyzer,
+    private val faceDetectionEngine: com.storagesense.app.ai.face.FaceDetectionEngine,
     private val faceClusterer: FaceClusterer,
     private val faceClusterDao: FaceClusterDao
 ) {
@@ -247,12 +248,33 @@ class StorageIndexManager @Inject constructor(
                                     hasFaces = visionResult.hasFaces
                                 )
                                 fileRepository.insertOrUpdate(finalDoc)
+
+                                if (visionResult.labels.isNotEmpty()) {
+                                    searchDao.indexImageOcr(finalDoc.id, finalDoc.name, visionResult.labels.joinToString(" "))
+                                }
+                            }
+
+                            if (visionResult.hasFaces) {
+                                try {
+                                    val faces = faceDetectionEngine.detectFacesInFile(java.io.File(doc.path))
+                                    for (face in faces) {
+                                        val embedding = face.landmarkEmbedding
+                                        val buffer = ByteBuffer.allocate(embedding.size * 4)
+                                        buffer.asFloatBuffer().put(embedding)
+                                        faceClusterDao.insertFace(
+                                            com.storagesense.app.ai.face.FaceClusterEntity(
+                                                imagePath = doc.path,
+                                                faceEmbedding = buffer.array(),
+                                                personClusterId = -1
+                                            )
+                                        )
+                                    }
+                                } catch (_: Exception) {}
                             }
                         } catch (_: Exception) {}
 
-                        indexingPipeline.indexFile(finalDoc)
                         faceDetectionCounter++
-                        if (faceDetectionCounter % 20 == 0) {
+                        if (faceDetectionCounter % 25 == 0) {
                             clusterAllFaces()
                         }
                         yield()
