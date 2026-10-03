@@ -36,3 +36,5 @@ logs/
 .venv/
 venv/
 env/
+dist/
+*.zip

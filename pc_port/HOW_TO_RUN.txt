@@ -2,28 +2,45 @@
              StorageSense PC Port — How to Run (1-Click Launchers)
 ========================================================================
 
-You do NOT need to remember or type long commands. There are 3 simple,
-1-click ways to run StorageSense:
+You do NOT need to type commands in a terminal. StorageSense includes a
+compiled native Windows executable (.exe) and 1-click launchers:
 
 ------------------------------------------------------------------------
-Option 1: Desktop Shortcut (Easiest!)
+Option 1: Native Windows Executable (Recommended!)
 ------------------------------------------------------------------------
-Double-click "Create_Desktop_Shortcut.bat" once in this folder.
-An icon called "StorageSense" will appear on your Windows Desktop.
-Simply double-click it anytime to start the AI engine and open the 
-Web Dashboard in your browser (http://localhost:8501)!
+Double-click:
+   👉 StorageSense.exe
+
+What it does:
+- Starts the StorageSense local intelligence engine quietly in the background.
+- Opens a dedicated **Native Desktop Application Window** (Chromium / Edge
+  App Mode) with no browser tabs or URL bars — feels 100% like a native desktop app!
+- Puts a StorageSense icon in your Windows System Tray (near the clock) where
+  you can:
+    • Open Dashboard anytime
+    • View real-time logs
+    • Restart the server
+    • Cleanly exit (kills background server automatically via Win32 Job Object)
 
 ------------------------------------------------------------------------
-Option 2: 1-Click Graphical Web Dashboard
+Option 2: Windows Desktop Shortcut
+------------------------------------------------------------------------
+Double-click:
+   👉 Create_Desktop_Shortcut.bat
+
+An official "StorageSense" desktop shortcut with the application icon will
+be created on your Windows Desktop. Double-click it anytime from your desktop!
+
+------------------------------------------------------------------------
+Option 3: Browser Batch Launcher
 ------------------------------------------------------------------------
 Double-click:
    👉 Start_StorageSense.bat
 
-It starts the on-device AI engine, launches the Streamlit Web UI,
-and opens your browser automatically.
+Starts the server and opens StorageSense in your default browser tab.
 
 ------------------------------------------------------------------------
-Option 3: Interactive CLI Assistant
+Option 4: Interactive CLI Terminal Assistant
 ------------------------------------------------------------------------
 If you prefer a fast, numbered terminal menu without opening a browser:
 Double-click:
@@ -39,13 +56,11 @@ Menu Options:
    [7] Exit
 
 ------------------------------------------------------------------------
-Command-Line Usage (Optional):
+Developer & Build Tools:
 ------------------------------------------------------------------------
-- Web App:   python run_app.py
-- Search:    python run_cli.py --search "your query"
-- Dedup:     python run_cli.py --dedup
-- Clean:     python run_cli.py --clean 1.0
-- Telemetry: python run_cli.py --telemetry
+- Recompile Executable:   python build_exe.py  (or run build_exe.bat)
+- Package Release ZIP:    python package_release.py
+- Command-Line Usage:     python run_cli.py --search "your query"
 
 ========================================================================
             100% Local & Private — Zero Data Leaves Your PC

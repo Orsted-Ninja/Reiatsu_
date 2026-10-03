@@ -18,15 +18,16 @@
 
 ---
 
-## 🚀 Quick Start (1-Click Launchers)
+## 🚀 Quick Start (Executables & 1-Click Launchers)
 
-No manual CLI commands needed! Use the provided batch launchers:
+No manual CLI commands needed! Use the compiled native Windows executable or launchers:
 
-| Launcher File | What It Does |
-| :--- | :--- |
-| **`Start_StorageSense.bat`** | **Recommended.** Starts the local engine and launches the Graphical Web Dashboard at `http://localhost:8501`. |
-| **`StorageSense_Assistant.bat`** | Launches the fast, interactive terminal menu (Search, Dedup, Clean, Telemetry). |
-| **`Create_Desktop_Shortcut.bat`** | Generates a 1-click desktop shortcut on your Windows Desktop pointing directly to StorageSense. |
+| Launcher File | Type | What It Does |
+| :--- | :--- | :--- |
+| **`StorageSense.exe`** | **Native Windows App** | **Recommended.** Double-click to start! Opens in a dedicated **Native Desktop Application Window** (Chromium / Edge App Mode) with no browser tabs, plus a system tray icon for logs, server restart, and clean shutdown. |
+| **`Create_Desktop_Shortcut.bat`** | **Desktop Shortcut** | Generates an official 1-click "StorageSense" shortcut with custom icon directly on your Windows Desktop. |
+| **`Start_StorageSense.bat`** | **Batch Launcher** | Starts the local engine and launches the dashboard in your default browser tab. |
+| **`StorageSense_Assistant.bat`** | **CLI Assistant** | Launches the fast, numbered interactive terminal menu (Search, Dedup, Clean, Telemetry). |
 
 ---
 
