@@ -10,12 +10,11 @@ import javax.inject.Singleton
 
 @Singleton
 class IntentParser @Inject constructor(
-    private val gson: Gson,
-    private val llmEngine: OnDeviceLlmEngine
+    private val gson: Gson
 ) {
     /**
      * Parses natural language user input into a strongly-typed StorageIntent.
-     * Uses deterministic fast-paths for instant response, and Gemma on-device LLM for complex queries.
+     * 100% deterministic and instantaneous. LLM is strictly reserved for document summarization.
      */
     suspend fun parse(userInput: String): StorageIntent {
         val raw = userInput.trim()
@@ -83,38 +82,7 @@ class IntentParser @Inject constructor(
             return StorageIntent.Filter(folderKeyword = "telegram", label = "Telegram Downloads & Media")
         }
 
-        // 4. If On-Device Gemma LLM is available, use it for intelligent intent extraction
-        if (llmEngine.isModelAvailable()) {
-            val prompt = """
-You are the StorageSense intent classifier. The user wants to manage their Android files.
-Analyze this input: "$raw"
-Output ONLY a valid JSON object with an "action" and "query" or other parameters. No markdown formatting or explanation.
-
-Actions:
-- SEARCH: User wants to find files or answers from files (e.g. "find pdfs", "my deep learning notes", "what is my aadhar number") -> {"action": "SEARCH", "query": "aadhar number", "is_image": false}
-- DEDUPLICATE: User wants to find/remove duplicates (e.g. "dedup downloads") -> {"action": "DEDUPLICATE", "query": "downloads"}
-- CLEANUP: User wants to free up space (e.g. "free up 2 gb") -> {"action": "CLEANUP", "target_gb": 2.0}
-- DELETE: User wants to delete something specific (e.g. "delete old assignments") -> {"action": "DELETE", "query": "old assignments"}
-- SUMMARIZE: User asks to summarize a document, topic, or file (e.g. "summarize my deep learning notes") -> {"action": "SUMMARIZE", "query": "deep learning notes"}
-- UNDO: User wants to reverse a deletion -> {"action": "UNDO", "query": ""}
-- AUDIT: User asks for an overview of storage space or what is taking up space (e.g. "what is taking up space", "storage overview") -> {"action": "AUDIT", "query": ""}
-
-Output JSON:
-""".trimIndent()
-
-            var jsonResponse = ""
-            try {
-                llmEngine.streamGenerate(prompt).collect { chunk ->
-                    jsonResponse += chunk
-                }
-                val cleanJson = jsonResponse.replace("```json", "").replace("```", "").trim()
-                tryParseJson(cleanJson)?.let { return it }
-            } catch (_: Exception) {
-                // Fallback to pattern matching
-            }
-        }
-
-        // 5. Pattern Match Fallback
+        // 4. Deterministic Intent Pattern Matching
         val isDeduplicate = lower.contains("duplicate") || lower.contains("dupe") || lower.contains("dedup")
         val isCleanup = lower.contains("clean") || lower.contains("free up") || lower.contains("clear space")
         val isDelete = lower.startsWith("delete") || lower.startsWith("remove") || lower.startsWith("trash")

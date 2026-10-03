@@ -24,24 +24,24 @@ class PdfExtractor(context: Context) : DocumentExtractor {
         return try {
             PDDocument.load(file).use { document ->
                 val numPages = document.numberOfPages
-                val pages = mutableListOf<ExtractedPage>()
-                val stripper = PDFTextStripper()
-                val fullTextSb = StringBuilder()
+                if (numPages <= 0) return ExtractionResult(fullText = "", needsOcrFallback = true)
 
-                for (page in 1..numPages) {
-                    stripper.startPage = page
-                    stripper.endPage = page
-                    val pageText = stripper.getText(document).trim()
-                    if (pageText.isNotEmpty()) {
-                        pages.add(ExtractedPage(page, pageText))
-                        fullTextSb.append(pageText).append("\n\n")
-                    }
+                val maxPages = minOf(numPages, 35)
+                val stripper = PDFTextStripper().apply {
+                    startPage = 1
+                    endPage = maxPages
+                }
+                val fullText = stripper.getText(document).trim()
+                val pageTexts = fullText.split("\u000c").map { it.trim() }.filter { it.isNotEmpty() }
+                val pages = if (pageTexts.isNotEmpty()) {
+                    pageTexts.mapIndexed { idx, txt -> ExtractedPage(idx + 1, txt) }
+                } else {
+                    listOf(ExtractedPage(1, fullText))
                 }
 
-                val fullText = fullTextSb.toString().trim()
-                val avgCharsPerPage = if (numPages > 0) fullText.length / numPages else 0
+                val avgCharsPerPage = if (maxPages > 0) fullText.length / maxPages else 0
                 // If average extracted chars per page < 30, it is likely a scanned PDF needing OCR
-                val needsOcr = numPages > 0 && avgCharsPerPage < 30
+                val needsOcr = maxPages > 0 && avgCharsPerPage < 30
 
                 ExtractionResult(
                     fullText = fullText,

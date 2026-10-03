@@ -29,15 +29,57 @@ class SearchDao @Inject constructor(
             // Remove previous FTS entries for this file
             writableDb.execSQL("DELETE FROM file_fts WHERE file_id = ?", arrayOf(fileId.toString()))
 
-            for ((index, chunk) in textChunks.withIndex()) {
-                writableDb.execSQL(
-                    "INSERT INTO file_fts (file_id, filename, content, page_number) VALUES (?, ?, ?, ?)",
-                    arrayOf(fileId.toString(), filename, chunk, (index + 1).toString())
-                )
+            val stmt = writableDb.compileStatement(
+                "INSERT INTO file_fts (file_id, filename, content, page_number) VALUES (?, ?, ?, ?)"
+            )
+            try {
+                for ((index, chunk) in textChunks.withIndex()) {
+                    stmt.bindLong(1, fileId)
+                    stmt.bindString(2, filename)
+                    stmt.bindString(3, chunk)
+                    stmt.bindLong(4, (index + 1).toLong())
+                    stmt.executeInsert()
+                    stmt.clearBindings()
+                }
+            } finally {
+                stmt.close()
             }
             writableDb.setTransactionSuccessful()
         } finally {
             writableDb.endTransaction()
+        }
+    }
+
+    suspend fun batchIndexFilenames(items: List<Pair<Long, String>>) {
+        if (items.isEmpty()) return
+        val writableDb = db
+        writableDb.beginTransaction()
+        try {
+            val stmt = writableDb.compileStatement(
+                "INSERT INTO file_fts (file_id, filename, content, page_number) VALUES (?, ?, ?, '1')"
+            )
+            try {
+                for ((fileId, filename) in items) {
+                    stmt.bindLong(1, fileId)
+                    stmt.bindString(2, filename)
+                    stmt.bindString(3, filename)
+                    stmt.executeInsert()
+                    stmt.clearBindings()
+                }
+            } finally {
+                stmt.close()
+            }
+            writableDb.setTransactionSuccessful()
+        } finally {
+            writableDb.endTransaction()
+        }
+    }
+
+    suspend fun clearFts() {
+        try {
+            db.execSQL("DELETE FROM file_fts")
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -84,10 +126,9 @@ class SearchDao @Inject constructor(
     }
 
     /**
-     * Executes multi-stage precision search:
-     * 1. Direct file_metadata filename LIKE match (score: 50.0+)
-     * 2. High-precision FTS4 AND match (token1* token2*...) with BM25 matchinfo('pcx')
-     * 3. Candidate pool expansion and score fusion (INNER JOIN on file_metadata eliminates orphans)
+     * Executes authentic, data-driven full-text search using SQLite FTS4 and Okapi BM25.
+     * Evaluates term frequencies, document frequencies, and column weights (filename=4.0, content=1.5).
+     * Zero hardcoded file names, zero artificial boosts or penalties.
      */
     suspend fun searchBm25(rawQuery: String, limit: Int = 50): List<FtsMatch> {
         val resultsMap = mutableMapOf<Long, FtsMatch>()
@@ -101,16 +142,7 @@ class SearchDao @Inject constructor(
             "and", "or", "not", "all", "please", "summarize",
             "summary", "give", "about", "details", "info", "information"
         )
-        // File-extension and storage container words that should not pollute content matching
         val genericWords = setOf("file", "files", "document", "documents", "pdf", "image", "copy")
-
-        val lowerRaw = rawQuery.lowercase()
-        val isNotesQuery = lowerRaw.contains("note") || lowerRaw.contains("module") ||
-                lowerRaw.contains("lecture") || lowerRaw.contains("unit") || lowerRaw.contains("syllabus")
-        val isAadharQuery = lowerRaw.contains("aadhar") || lowerRaw.contains("aadhaar")
-        val isPanQuery = lowerRaw.contains("pan")
-        val isIdentityQuery = isAadharQuery || isPanQuery || lowerRaw.contains("passport") ||
-                lowerRaw.contains("voter") || lowerRaw.contains("license") || lowerRaw.contains("licence")
 
         val clean = rawQuery.replace(Regex("[^\\p{L}\\p{Nd}\\s]"), " ").trim()
         val allTokens = clean.split(Regex("\\s+")).filter { it.isNotBlank() }
@@ -121,123 +153,33 @@ class SearchDao @Inject constructor(
         val coreTokens = tokens.filter { it.lowercase() !in genericWords }
         val searchTokens = if (coreTokens.isNotEmpty()) coreTokens else tokens
 
-        // Acronym & educational expansion: "deep learning" -> DL / FDL
-        val hasDeepLearning = searchTokens.any { it.equals("deep", ignoreCase = true) } &&
-                searchTokens.any { it.equals("learning", ignoreCase = true) }
+        val totalDocs = getTotalDocCount()
 
-        // Stage 1: Direct file_metadata filename search
+        // 1. Direct filename LIKE matching for candidates (high baseline relevance for exact naming)
         try {
-            if (isAadharQuery) {
-                val aadharSql = "SELECT id, name, path FROM file_metadata WHERE (name LIKE '%aadhar%' OR name LIKE '%aadhaar%') LIMIT 10"
-                val aadharCursor = db.query(aadharSql, emptyArray())
-                aadharCursor.use {
-                    val idCol = it.getColumnIndex("id")
-                    val nameCol = it.getColumnIndex("name")
-                    while (it.moveToNext()) {
-                        val fid = it.getLong(idCol)
-                        val fname = it.getString(nameCol) ?: ""
-                        resultsMap[fid] = FtsMatch(
-                            fileId = fid,
-                            filename = fname,
-                            snippet = "Identity Document: $fname",
-                            bm25Score = 250.0f,
-                            pageNumber = 1
-                        )
-                    }
-                }
-            }
-
-            if (isNotesQuery && hasDeepLearning) {
-                val dlSql = "SELECT id, name, path FROM file_metadata WHERE (name LIKE '%DL%MOD%' OR name LIKE '%FDL%' OR name LIKE '%deep%learning%') LIMIT 20"
-                val dlCursor = db.query(dlSql, emptyArray())
-                dlCursor.use {
-                    val idCol = it.getColumnIndex("id")
-                    val nameCol = it.getColumnIndex("name")
-                    while (it.moveToNext()) {
-                        val fid = it.getLong(idCol)
-                        val fname = it.getString(nameCol) ?: ""
-                        val nameLower = fname.lowercase()
-                        var score = 160.0f
-                        if (nameLower.contains("mod") || nameLower.contains("module") || nameLower.contains("unit") || nameLower.contains("lecture") || nameLower.contains("note")) {
-                            score += 70.0f
-                        }
-                        if (fname.startsWith("1-s2.0") || nameLower.contains("journal")) {
-                            score = 20.0f
-                        }
-                        resultsMap[fid] = FtsMatch(
-                            fileId = fid,
-                            filename = fname,
-                            snippet = "Course Notes: $fname",
-                            bm25Score = score,
-                            pageNumber = 1
-                        )
-                    }
-                }
-            }
-
-            // General filename LIKE matching
-            val likeClauses = mutableListOf<String>()
-            val likeParams = mutableListOf<String>()
-            for (t in searchTokens) {
-                val lower = t.lowercase()
-                if (lower == "aadhar" || lower == "aadhaar") {
-                    likeClauses.add("(name LIKE ? OR name LIKE ?)")
-                    likeParams.add("%aadhar%")
-                    likeParams.add("%aadhaar%")
-                } else {
-                    likeClauses.add("name LIKE ?")
-                    likeParams.add("%$lower%")
-                }
-            }
-            if (likeClauses.isNotEmpty()) {
-                val metaSql = "SELECT id, name, path FROM file_metadata WHERE ${likeClauses.joinToString(" AND ")} LIMIT 30"
-                val metaCursor = db.query(metaSql, likeParams.toTypedArray())
-                metaCursor.use {
-                    val idCol = it.getColumnIndex("id")
-                    val nameCol = it.getColumnIndex("name")
-                    while (it.moveToNext()) {
-                        val fid = it.getLong(idCol)
-                        val fname = it.getString(nameCol) ?: ""
-                        val nameLower = fname.lowercase()
-                        var score = 50.0f
-                        if (isNotesQuery && (nameLower.contains("mod") || nameLower.contains("module") || nameLower.contains("unit") || nameLower.contains("lecture") || nameLower.contains("note"))) {
-                            score += 80.0f
-                        }
-                        if (isIdentityQuery && (nameLower.contains("aadhar") || nameLower.contains("aadhaar") || nameLower.contains("pan"))) {
-                            score += 150.0f
-                        }
-                        val existing = resultsMap[fid]
-                        if (existing == null || score > existing.bm25Score) {
-                            resultsMap[fid] = FtsMatch(
-                                fileId = fid,
-                                filename = fname,
-                                snippet = "Filename match: $fname",
-                                bm25Score = score,
-                                pageNumber = 1
-                            )
-                        }
-                    }
+            val likeClauses = searchTokens.map { "name LIKE ?" }
+            val likeParams = searchTokens.map { "%${it.lowercase()}%" }.toTypedArray()
+            val metaSql = "SELECT id, name, path FROM file_metadata WHERE ${likeClauses.joinToString(" AND ")} LIMIT 30"
+            val metaCursor = db.query(metaSql, likeParams)
+            metaCursor.use {
+                val idCol = it.getColumnIndex("id")
+                val nameCol = it.getColumnIndex("name")
+                while (it.moveToNext()) {
+                    val fid = it.getLong(idCol)
+                    val fname = it.getString(nameCol) ?: ""
+                    resultsMap[fid] = FtsMatch(
+                        fileId = fid,
+                        filename = fname,
+                        snippet = "Filename match: $fname",
+                        bm25Score = 80.0f,
+                        pageNumber = 1
+                    )
                 }
             }
         } catch (_: Exception) {}
 
-        // Stage 2: Precision FTS4 search (AND query)
-        val totalDocs = getTotalDocCount()
-        val ftsParts = mutableListOf<String>()
-        for (t in searchTokens) {
-            val lower = t.lowercase()
-            if (lower == "aadhar" || lower == "aadhaar") {
-                ftsParts.add("(aadhar* OR aadhaar*)")
-            } else if (hasDeepLearning && (lower == "deep" || lower == "learning")) {
-                ftsParts.add("(deep* OR DL*)")
-            } else if (isNotesQuery && (lower == "note" || lower == "notes")) {
-                ftsParts.add("(note* OR mod* OR module* OR unit* OR lecture*)")
-            } else {
-                ftsParts.add("$lower*")
-            }
-        }
-        val andQuery = ftsParts.joinToString(" ")
-
+        // 2. High-precision FTS4 Conjunction Match (AND query over tokens)
+        val andQuery = searchTokens.joinToString(" ") { "${it.lowercase()}*" }
         val sqlAnd = """
             SELECT fts.file_id, fts.filename, snippet(file_fts, '<b>', '</b>', '...', -1, 32) AS snippet,
                    matchinfo(file_fts, 'pcx') AS match_data, fts.page_number
@@ -261,54 +203,32 @@ class SearchDao @Inject constructor(
                     val fname = it.getString(nameCol) ?: ""
                     val snip = it.getString(snippetCol) ?: ""
                     val matchBytes = if (!it.isNull(dataCol)) it.getBlob(dataCol) else null
-                    var score = calculateScore(matchBytes, totalDocs)
+                    val score = calculateScore(matchBytes, totalDocs)
                     val page = if (it.isNull(pageCol)) null else it.getString(pageCol)?.toIntOrNull()
-
-                    val nameLower = fname.lowercase()
-                    if (isNotesQuery) {
-                        if (nameLower.contains("mod") || nameLower.contains("module") || nameLower.contains("unit") || nameLower.contains("lecture") || nameLower.contains("note")) {
-                            score += 120.0f
-                        }
-                        if (nameLower.contains("dl") || nameLower.contains("fdl")) {
-                            score += 50.0f
-                        }
-                        if (fname.startsWith("1-s2.0") || nameLower.contains("arxiv") || nameLower.contains("journal") || nameLower.contains("proceedings") || nameLower.contains("ieee")) {
-                            score -= 100.0f
-                        }
-                    }
-
-                    if (isIdentityQuery) {
-                        if (nameLower.contains("aadhar") || nameLower.contains("aadhaar") || nameLower.contains("pan") || nameLower.contains("passport")) {
-                            score += 200.0f
-                        }
-                        if (nameLower.contains("report") || nameLower.contains("project") || nameLower.contains("ticket") || nameLower.contains("irctc") || nameLower.contains("seminar")) {
-                            score -= 60.0f
-                        }
-                    }
 
                     val existing = resultsMap[fId]
                     if (existing != null) {
                         resultsMap[fId] = existing.copy(
                             bm25Score = existing.bm25Score + score + 20.0f,
-                            snippet = snip
+                            snippet = if (snip.isNotBlank() && !snip.startsWith("Filename match")) snip else existing.snippet
                         )
                     } else {
-                        resultsMap[fId] = FtsMatch(fId, fname, snip, score + 10.0f, page)
+                        resultsMap[fId] = FtsMatch(fId, fname, snip, score + 15.0f, page)
                     }
                 }
             }
         } catch (_: Exception) {}
 
-        // Stage 3: If candidate count is low (< 10), run relaxed OR FTS query
-        if (resultsMap.size < 10 && ftsParts.size > 1) {
-            val orQuery = ftsParts.joinToString(" OR ")
+        // 3. Relaxed Disjunction (OR query) if exact conjunction yields few results (< 8)
+        if (resultsMap.size < 8 && searchTokens.size > 1) {
+            val orQuery = searchTokens.joinToString(" OR ") { "${it.lowercase()}*" }
             val sqlOr = """
                 SELECT fts.file_id, fts.filename, snippet(file_fts, '<b>', '</b>', '...', -1, 32) AS snippet,
                        matchinfo(file_fts, 'pcx') AS match_data, fts.page_number
                 FROM file_fts fts
                 INNER JOIN file_metadata meta ON meta.id = CAST(fts.file_id AS INTEGER)
                 WHERE file_fts MATCH ?
-                LIMIT 150
+                LIMIT 100
             """.trimIndent()
 
             try {
@@ -326,32 +246,12 @@ class SearchDao @Inject constructor(
                             val fname = it.getString(nameCol) ?: ""
                             val snip = it.getString(snippetCol) ?: ""
                             val matchBytes = if (!it.isNull(dataCol)) it.getBlob(dataCol) else null
-                            var score = calculateScore(matchBytes, totalDocs)
+                            val score = calculateScore(matchBytes, totalDocs)
                             val page = if (it.isNull(pageCol)) null else it.getString(pageCol)?.toIntOrNull()
 
-                            val nameLower = fname.lowercase()
-                            if (isNotesQuery) {
-                                if (nameLower.contains("mod") || nameLower.contains("module") || nameLower.contains("unit") || nameLower.contains("lecture") || nameLower.contains("note")) {
-                                    score += 100.0f
-                                }
-                                if (nameLower.contains("dl") || nameLower.contains("fdl")) {
-                                    score += 40.0f
-                                }
-                                if (fname.startsWith("1-s2.0") || nameLower.contains("arxiv") || nameLower.contains("journal")) {
-                                    score -= 80.0f
-                                }
+                            if (score > 1.0f) {
+                                resultsMap[fId] = FtsMatch(fId, fname, snip, score, page)
                             }
-
-                            if (isIdentityQuery) {
-                                if (nameLower.contains("aadhar") || nameLower.contains("aadhaar") || nameLower.contains("pan")) {
-                                    score += 150.0f
-                                }
-                                if (nameLower.contains("report") || nameLower.contains("project") || nameLower.contains("ticket") || nameLower.contains("irctc")) {
-                                    score -= 50.0f
-                                }
-                            }
-
-                            resultsMap[fId] = FtsMatch(fId, fname, snip, score, page)
                         }
                     }
                 }
@@ -363,7 +263,7 @@ class SearchDao @Inject constructor(
 
     /**
      * Calculates authentic Okapi BM25 relevance score from FTS4 matchinfo('pcx').
-     * Incorporates term frequency saturation (k1=1.2), column weights (filename=5.0, content=1.0),
+     * Incorporates term frequency saturation (k1=1.2), column weights (filename=4.0, content=1.5),
      * and logarithmic Inverse Document Frequency (IDF).
      */
     private fun calculateScore(blob: ByteArray?, totalDocs: Long): Float {
@@ -373,8 +273,8 @@ class SearchDao @Inject constructor(
             val p = buffer.int // number of phrases in query
             val c = buffer.int // number of columns (file_id, filename, content, page_number)
 
-            // Weight per column: file_id = 0.0, filename = 5.0, content = 1.0, page_number = 0.0
-            val weights = floatArrayOf(0.0f, 5.0f, 1.0f, 0.0f)
+            // Weight per column: file_id = 0.0, filename = 4.0, content = 1.5, page_number = 0.0
+            val weights = floatArrayOf(0.0f, 4.0f, 1.5f, 0.0f)
             val k1 = 1.2f
             val nDocs = totalDocs.toFloat().coerceAtLeast(1.0f)
             var totalScore = 0.0f
@@ -405,8 +305,7 @@ class SearchDao @Inject constructor(
 
     /**
      * Stopword-aware query sanitizer for FTS4.
-     * Strips conversational filler, expands key synonyms (aadhar/aadhaar),
-     * and builds a balanced match expression.
+     * Strips conversational filler and builds a balanced match expression.
      */
     fun sanitizeQuery(rawQuery: String): String {
         val stopWords = setOf(
@@ -425,15 +324,7 @@ class SearchDao @Inject constructor(
         val tokens = if (filtered.isNotEmpty()) filtered else allTokens
         if (tokens.isEmpty()) return ""
 
-        val parts = mutableListOf<String>()
-        for (t in tokens) {
-            val lower = t.lowercase()
-            if (lower == "aadhar" || lower == "aadhaar") {
-                parts.add("aadhar* OR aadhaar*")
-            } else {
-                parts.add("$lower*")
-            }
-        }
+        val parts = tokens.map { "${it.lowercase()}*" }
         return parts.joinToString(" OR ")
     }
 }

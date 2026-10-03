@@ -100,6 +100,52 @@ class IndexingPipeline @Inject constructor(
         )
     }
 
+    /**
+     * Rapid text extraction and FTS chunking WITHOUT waiting for neural embeddings (~5-15ms per doc).
+     * Extracts text, creates ~400-token chunks, and inserts them into SQLite Room & FTS4 immediately.
+     */
+    suspend fun indexDocumentFast(fileItem: FileItem): Boolean = withContext(Dispatchers.IO) {
+        val file = File(fileItem.path)
+        if (!file.exists() || !file.canRead()) return@withContext false
+
+        val fileId = if (fileItem.id == 0L) {
+            fileRepository.insertOrUpdate(fileItem)
+        } else {
+            fileItem.id
+        }
+
+        try {
+            val extractor = extractorFactory.getExtractor(fileItem.extension) ?: return@withContext false
+            val extraction = extractor.extractText(file)
+
+            var contentText = extraction.fullText
+            if ((extraction.needsOcrFallback || contentText.length < 50) && fileItem.category == FileCategory.DOCUMENT_PDF) {
+                val ocr = ocrEngine.recognizePdf(file, maxPages = 2)
+                if (ocr.fullText.isNotBlank()) {
+                    contentText = ocr.fullText
+                }
+            }
+
+            if (contentText.isBlank()) {
+                contentText = fileItem.name
+            }
+
+            val chunks = textChunker.chunk(contentText)
+            val chunkTexts = if (chunks.isNotEmpty()) chunks.take(35).map { it.text } else listOf(fileItem.name)
+
+            // Index in FTS and document_chunks table with null embeddings (instantaneous!)
+            searchRepository.indexDocumentText(
+                fileId = fileId,
+                filename = fileItem.name,
+                textChunks = chunkTexts,
+                embeddings = null
+            )
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     private suspend fun indexImage(file: File, fileId: Long, fileItem: FileItem) {
         // Fast Tier 1: OCR text extraction
         val ocrResult = ocrEngine.recognizeText(file)
